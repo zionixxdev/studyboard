@@ -20,7 +20,14 @@ export const isSupabaseConfigured = Boolean(url && anonKey);
  * Session persistence uses the official client's default (localStorage) with
  * automatic token refresh, which gives "remember me" behaviour securely.
  */
-export const supabase: SupabaseClient = createClient(url ?? '', anonKey ?? '', {
+// Placeholder values used only when the env vars are absent. supabase-js throws
+// at construction time if the URL is empty, which would crash the whole bundle
+// before the app could render its setup screen — so we construct a harmless
+// client instead and let App.tsx show the "needs Supabase configured" notice.
+const FALLBACK_URL = 'http://localhost:54321';
+const FALLBACK_KEY = 'public-anon-key-placeholder';
+
+export const supabase: SupabaseClient = createClient(url || FALLBACK_URL, anonKey || FALLBACK_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
