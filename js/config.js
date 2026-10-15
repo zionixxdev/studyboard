@@ -19,6 +19,17 @@ export const SUPABASE_ANON_KEY =
 export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_95hXcY3iyNly3RUfhfPW9Q_j1lk2iPF";
 
 // ---------------------------------------------------------------------------
+// Sign-in mode.
+//   "google"              — Google only (default). Durable identity: the same
+//                           account is the same user everywhere, so rooms stay
+//                           yours across devices and browser cleaning.
+//   "google-or-anonymous" — also offer account-free sign-in, keeping the
+//                           original "join with just a nickname" flow. Identity
+//                           then lives only in this browser's storage.
+// ---------------------------------------------------------------------------
+export const AUTH_MODE = "google";
+
+// ---------------------------------------------------------------------------
 // WebRTC ICE configuration.
 // STUN alone handles most home/mobile networks. A restrictive (symmetric NAT /
 // corporate) network needs a TURN relay. Free TURN is not reliably available,

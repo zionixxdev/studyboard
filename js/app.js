@@ -2,9 +2,15 @@
 // Home / dashboard: create a room, join with a code, list your rooms.
 // =============================================================================
 import { sb } from "./supabase-client.js";
-import { ensureSession } from "./auth.js";
+import {
+  requireSession, signInWithGoogle, signInAnonymously, signOut,
+  anonymousAllowed, oauthErrorFromUrl, userEmail, displayName,
+} from "./auth.js";
 import { $, escapeHtml, fmtClock, saveInviteCode } from "./util.js";
-import { initTheme, initOnlineBanner, initInstallPrompt, registerServiceWorker, toast, setConn } from "./ui.js";
+import {
+  initTheme, initOnlineBanner, initInstallPrompt, registerServiceWorker,
+  showAuthGate, toast, setConn,
+} from "./ui.js";
 import { MAX_ROOM_NAME_LEN, MAX_NICK_LEN, REPO_URL } from "./config.js";
 
 initTheme();
@@ -23,9 +29,10 @@ if (params.get("invite")) {
 function busy(btn, on) { if (btn) btn.disabled = on; }
 
 async function boot() {
+  const oauthError = oauthErrorFromUrl();
   let user = null;
   try {
-    user = await ensureSession();
+    user = await requireSession();
     setConn("online", "connected");
   } catch (e) {
     setConn("offline", "offline");
@@ -34,8 +41,24 @@ async function boot() {
     return;
   }
 
-  const saved = localStorage.getItem(NICK_KEY) || "";
-  if (saved) { $("#createNick").value = saved; $("#joinNick").value = saved; }
+  // No session: ask who you are. Nothing is ever created behind your back.
+  if (!user) {
+    showAuthGate({
+      error: oauthError,
+      onGoogle: () => signInWithGoogle(location.origin + location.pathname),
+      onAnonymous: anonymousAllowed()
+        ? async () => {
+            try { await signInAnonymously(); location.reload(); }
+            catch (e) { toast(e.message, "error"); }
+          }
+        : null,
+    });
+    return;
+  }
+
+  const saved = localStorage.getItem(NICK_KEY) || displayName(user);
+  $("#createNick").value = saved;
+  $("#joinNick").value = saved;
 
   // Show the source link only once a real repository URL is configured.
   const repoLink = $("#repoLink");
@@ -44,12 +67,17 @@ async function boot() {
     repoLink.hidden = false;
   }
 
-  // Surface this browser's anonymous identity. It must stay the same between
-  // page loads — if it changes, access to your own rooms silently disappears,
-  // so it is worth being able to see.
+  // With a real account there is no fragile browser-local identity to warn
+  // about — say who you are signed in as and move on.
   const sessionLine = $("#sessionLine");
-  if (sessionLine && user?.id) {
-    sessionLine.innerHTML = `This browser's identity: <code>${escapeHtml(String(user.id).slice(0, 8))}</code> — it must stay the same to keep access to your rooms.`;
+  if (sessionLine) {
+    sessionLine.innerHTML = `Signed in as <strong>${escapeHtml(userEmail(user) || displayName(user))}</strong> — your rooms follow this account, on any device.`;
+  }
+
+  const signOutBtn = $("#signOutBtn");
+  if (signOutBtn) {
+    signOutBtn.hidden = false;
+    signOutBtn.onclick = async () => { await signOut(); location.reload(); };
   }
 
   $("#createBtn").onclick = onCreate;

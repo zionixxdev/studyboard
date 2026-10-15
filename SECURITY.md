@@ -13,8 +13,11 @@ verified against a live database.
   design. It grants nothing on its own — Row Level Security is what constrains
   access. The `service_role` key and database password are **never** in frontend
   code.
-- **Identity is anonymous.** A user id comes from Supabase anonymous auth and is
-  stored in `localStorage`. It is a bearer credential for that browser only.
+- **Identity is a Google account** (by default). Supabase verifies the Google
+  ID token server-side and issues its own session; the app only ever sees
+  `auth.uid()`. A user id is therefore durable and not a bearer credential tied
+  to one browser. If `AUTH_MODE = "google-or-anonymous"`, an anonymous user id
+  *is* browser-bound and should be treated as a bearer credential.
 
 ## 2. Controls
 
@@ -104,8 +107,8 @@ Every one of these held:
 
 ## 4. Known limitations (accepted, by design)
 
-- **Anonymous accounts are browser-bound.** Clearing site data loses ownership.
-  There is no recovery path without adding a real auth provider.
+- **Only the account-free mode is browser-bound.** With Google sign-in there is
+  no such loss; that mode is off by default for exactly this reason.
 - **No end-to-end encryption** of board/chat content; data is protected by RLS
   and TLS in transit, and readable by the project operator.
 - **No TURN server** is provided, so some restrictive networks cannot place

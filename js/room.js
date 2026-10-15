@@ -4,7 +4,10 @@
 // the server-authoritative RPCs to the UI.
 // =============================================================================
 import { sb } from "./supabase-client.js";
-import { ensureSession } from "./auth.js";
+import {
+  requireSession, signInWithGoogle, signInAnonymously, signOut,
+  anonymousAllowed, displayName, userEmail,
+} from "./auth.js";
 import {
   $, $$, escapeHtml, randomId, fmtTime, fmtClock, fmtBytes,
   colorFor, initials, throttle, renderMessageBody,
@@ -12,7 +15,7 @@ import {
 } from "./util.js";
 import {
   initTheme, initOnlineBanner, initInstallPrompt, registerServiceWorker,
-  toast, setConn, openModal, confirmDialog, promptDialog,
+  showAuthGate, toast, setConn, openModal, confirmDialog, promptDialog,
 } from "./ui.js";
 import { Whiteboard, PALETTE } from "./whiteboard.js";
 import { createChat } from "./chat.js";
@@ -52,12 +55,30 @@ const params = new URLSearchParams(location.search);
 main();
 
 async function main() {
+  let user = null;
   try {
-    me = await ensureSession();
+    user = await requireSession();
   } catch (e) {
     toast(e.message, "error");
     return;
   }
+
+  // A stable identity is the whole point of the sign-in gate here: without one,
+  // a room cannot tell that you are its owner.
+  if (!user) {
+    showAuthGate({
+      message: "Sign in to open this study room. A stable identity is what lets the room recognise you as its owner or a member.",
+      onGoogle: () => signInWithGoogle(location.href),
+      onAnonymous: anonymousAllowed()
+        ? async () => {
+            try { await signInAnonymously(); location.reload(); }
+            catch (e) { toast(e.message, "error"); }
+          }
+        : null,
+    });
+    return;
+  }
+  me = user.id;
 
   let roomId = params.get("room");
   const inviteCode = params.get("invite");
@@ -115,7 +136,7 @@ async function joinExisting(roomId, code) {
 }
 
 async function askNickname() {
-  const saved = localStorage.getItem(NICK_KEY) || "";
+  const saved = localStorage.getItem(NICK_KEY) || displayName();
   const nick = await promptDialog({
     title: "Pick a nickname",
     label: "How should others see you?",
@@ -815,6 +836,10 @@ function renderCall({ inCall, peers, streams }) {
 
 // ------------------------------------------------------------ settings panel
 function wireSettings() {
+  $("#settingsNote").textContent = "Signed in as " + (userEmail() || displayName()) + ".";
+  const signOutBtn = $("#signOutBtn");
+  if (signOutBtn) signOutBtn.onclick = async () => { await signOut(); location.href = "index.html"; };
+
   $("#setName").value = room.name;
   $("#setLocked").checked = !!room.is_locked;
   $("#deleteRoom").hidden = myMember.role !== "owner";

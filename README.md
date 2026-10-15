@@ -2,8 +2,12 @@
 
 A real-time collaborative study portal. Spin up a room, share a link, and work
 through problems together on a shared whiteboard with group chat, a
-server-synchronised focus timer, file sharing, maths tools and voice/video —
-no email, no password, no accounts.
+server-synchronised focus timer, file sharing, maths tools and voice/video.
+
+Sign-in is **Google-only by default**, so your rooms, boards and files follow
+your account — across devices, and after clearing your browser data. An
+account-free mode still exists for the original "join with just a nickname"
+flow; see `AUTH_MODE` in §4.
 
 Built as a **zero-build, zero-cost** Progressive Web App: a static frontend you
 can host on GitHub Pages, backed by Supabase (Postgres + RLS + Realtime +
@@ -94,10 +98,29 @@ files, which is what makes it a free, build-free static site on any host.
    The migrations create every table, index, RLS policy, secure RPC, the
    Realtime publication and the private `room-files` storage bucket.
 
-3. **Enable anonymous sign-ins** — *required*.
-   Dashboard → **Authentication → Sign In / Providers → Anonymous sign-ins →
-   Enable**. The app calls `signInAnonymously()`; without this toggle it cannot
-   create a session.
+3. **Enable Google sign-in** — *required by default*.
+
+   In the [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+   create an **OAuth client ID** of type **Web application**, and add this as an
+   **Authorised redirect URI**:
+
+   ```
+   https://<your-project-ref>.supabase.co/auth/v1/callback
+   ```
+
+   Copy the **Client ID** and **Client secret**, then in Supabase go to
+   **Authentication → Sign In / Providers → Google**, enable it, paste both, and
+   Save.
+
+   Finally, in **Authentication → URL Configuration**, set the **Site URL** and
+   add every URL the app is served from to **Redirect URLs** — e.g.
+   `http://localhost:8080/**` and `https://<you>.github.io/<repo>/**`. OAuth
+   returns to your app through this list, so a missing entry is the usual cause
+   of a redirect error after signing in.
+
+   *Optional:* to restore the account-free flow, also enable **Anonymous
+   sign-ins** and set `AUTH_MODE = "google-or-anonymous"` in `js/config.js`.
+   Identity then lives only in that browser's storage.
 
 4. **(Recommended) Add a site URL** under Authentication → URL Configuration so
    redirects and rate limits behave on your deployed domain.
@@ -211,9 +234,11 @@ rather than promised away:
 - **Live collaboration does not work offline.** Drawings, chat, the timer and
   calls all sync through the server. The offline shell shows already-loaded
   content and explains this; unsent local work is kept where feasible.
-- **Anonymous identity is browser-bound.** Clearing site data creates a new
-  identity and you lose ownership of rooms created under the old one. This is
-  the trade-off for "no account required to join".
+- **The account-free mode is browser-bound.** With Google sign-in, identity is
+  durable and none of this applies. If you switch `AUTH_MODE` to
+  `"google-or-anonymous"`, an anonymous identity lives only in that browser's
+  storage: clearing site data loses ownership of rooms created under it. That
+  is the trade-off for "no account required to join".
 - **Supabase free-tier quotas** apply (database size, storage, bandwidth,
   Realtime concurrent connections, and a project that pauses after ~1 week of
   inactivity). `public.cleanup_old_rooms(days)` is provided for retention —

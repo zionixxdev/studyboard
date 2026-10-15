@@ -16,8 +16,18 @@ Two independent pieces: a **static frontend** (GitHub Pages) and a **backend**
    supabase link --project-ref <your-ref>
    supabase db push
    ```
-3. **Authentication → Sign In / Providers → Anonymous sign-ins → Enable.**
-   Without this, the app cannot create a session.
+3. **Enable Google sign-in.** In Google Cloud Console create an OAuth client ID
+   (type: Web application) with the authorised redirect URI
+   `https://<your-project-ref>.supabase.co/auth/v1/callback`. Then in Supabase:
+   **Authentication → Sign In / Providers → Google** → enable, paste the client
+   ID and secret, Save.
+
+   In **Authentication → URL Configuration**, set the Site URL and add your
+   app's URLs to Redirect URLs (`http://localhost:8080/**` plus the deployed
+   URL). A missing entry there is the usual cause of a redirect error.
+
+   *Optional:* for the account-free flow instead, enable **Anonymous sign-ins**
+   and set `AUTH_MODE = "google-or-anonymous"` in `js/config.js`.
 4. Authentication → URL Configuration: add your Pages URL.
 5. Verify: `select * from pg_policies where schemaname='public';` should list the
    policies; Storage should show a private `room-files` bucket.

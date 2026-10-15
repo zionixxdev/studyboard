@@ -8,7 +8,7 @@ export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: true,       // survives refresh via localStorage
     autoRefreshToken: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: true,   // required: Google OAuth returns to us via the URL
   },
   realtime: {
     params: { eventsPerSecond: 20 }, // throttle: protects slow connections
