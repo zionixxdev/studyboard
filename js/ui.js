@@ -135,30 +135,6 @@ export function initInstallPrompt() {
   });
 }
 
-// The sign-in gate. Shown instead of the app whenever there is no session, on
-// either page. Deliberately not dismissible: without an identity there is
-// nothing to show, and silently inventing one is what caused the original
-// "you are not a member of your own room" bug.
-export function showAuthGate({ onGoogle, onAnonymous, message, error } = {}) {
-  const host = modalHost();
-  const scrim = document.createElement("div");
-  scrim.className = "modal-scrim";
-  scrim.innerHTML = `<div class="modal" role="dialog" aria-modal="true" style="max-width:440px">
-      <h2>Sign in to StudyBoard</h2>
-      <p class="small muted">${escapeHtml(message || "Sign in with Google so your rooms, boards and files stay yours — on any device, and even if you clear your browser data.")}</p>
-      ${error ? `<p class="small" style="color:var(--danger)">${escapeHtml(error)}</p>` : ""}
-      <p style="margin-top:1rem"><button class="btn primary" id="authGoogle" style="width:100%">Continue with Google</button></p>
-      ${onAnonymous ? `<p><button class="btn" id="authAnon" style="width:100%">Continue without an account</button></p>
-        <p class="small muted">Without an account your identity lives only in this browser: clear its data and you lose access to your rooms.</p>` : ""}
-      <p class="small muted">Your name and email are used only to identify you to the people in your rooms. No passwords, no mailing list.</p>
-    </div>`;
-  host.appendChild(scrim);
-  scrim.querySelector("#authGoogle").onclick = () => onGoogle?.();
-  const anonBtn = scrim.querySelector("#authAnon");
-  if (anonBtn) anonBtn.onclick = () => onAnonymous?.();
-  return () => scrim.remove();
-}
-
 // Registers the service worker that makes the app installable and gives it the
 // offline shell. Without this the manifest alone does nothing. Failures are
 // ignored: registration is refused on file:// and in some sandboxed contexts,

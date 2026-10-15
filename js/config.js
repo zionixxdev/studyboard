@@ -9,25 +9,15 @@
 // README.md. The committed values below point at the StudyBoard project.
 // =============================================================================
 
-export const SUPABASE_URL = "https://pfjuldkgbkvjoczammas.supabase.co";
+export const SUPABASE_URL = "https://pmmtzldygjhklwehzfjw.supabase.co";
 
 // Legacy anon key (widely compatible with supabase-js v2). Public-safe.
 export const SUPABASE_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmanVsZGtnYmt2am9jemFtbWFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwNjUwNzgsImV4cCI6MjEwNzY0MTA3OH0.TRQHrNeV46ToEPwvNMwLklBU3xxRONc_jk7KEL5s-9o";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtbXR6bGR5Z2poa2x3ZWh6Zmp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwNzA3MDUsImV4cCI6MjEwNzY0NjcwNX0.g75DoQ5l-gsZhBe_JDC-CwwK_JIDrMNW-xZmKuqdMyA";
 
 // Modern publishable key (optional alternative to the legacy anon key above).
-export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_95hXcY3iyNly3RUfhfPW9Q_j1lk2iPF";
+export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_mpZFOYgJpjDvoyoB_DuLAw_C3fpQzHl";
 
-// ---------------------------------------------------------------------------
-// Sign-in mode.
-//   "google"              — Google only (default). Durable identity: the same
-//                           account is the same user everywhere, so rooms stay
-//                           yours across devices and browser cleaning.
-//   "google-or-anonymous" — also offer account-free sign-in, keeping the
-//                           original "join with just a nickname" flow. Identity
-//                           then lives only in this browser's storage.
-// ---------------------------------------------------------------------------
-export const AUTH_MODE = "google";
 
 // ---------------------------------------------------------------------------
 // WebRTC ICE configuration.

@@ -2,15 +2,13 @@
 // Home / dashboard: create a room, join with a code, list your rooms.
 // =============================================================================
 import { sb } from "./supabase-client.js";
-import {
-  requireSession, signInWithGoogle, signInAnonymously, signOut,
-  anonymousAllowed, oauthErrorFromUrl, userEmail, displayName,
-} from "./auth.js";
+import * as auth from "./auth.js";
 import { $, escapeHtml, fmtClock, saveInviteCode } from "./util.js";
 import {
   initTheme, initOnlineBanner, initInstallPrompt, registerServiceWorker,
-  showAuthGate, toast, setConn,
+  toast, setConn,
 } from "./ui.js";
+import { showAuthGate, authGateHandlers } from "./auth-ui.js";
 import { MAX_ROOM_NAME_LEN, MAX_NICK_LEN, REPO_URL } from "./config.js";
 
 initTheme();
@@ -29,10 +27,10 @@ if (params.get("invite")) {
 function busy(btn, on) { if (btn) btn.disabled = on; }
 
 async function boot() {
-  const oauthError = oauthErrorFromUrl();
+  const urlState = auth.initialUrlState();
   let user = null;
   try {
-    user = await requireSession();
+    user = await auth.requireSession();
     setConn("online", "connected");
   } catch (e) {
     setConn("offline", "offline");
@@ -41,22 +39,20 @@ async function boot() {
     return;
   }
 
-  // No session: ask who you are. Nothing is ever created behind your back.
-  if (!user) {
-    showAuthGate({
-      error: oauthError,
-      onGoogle: () => signInWithGoogle(location.origin + location.pathname),
-      onAnonymous: anonymousAllowed()
-        ? async () => {
-            try { await signInAnonymously(); location.reload(); }
-            catch (e) { toast(e.message, "error"); }
-          }
-        : null,
-    });
+  // Arriving from a password-reset link: set a new password before anything else.
+  if (urlState?.type === "recovery") {
+    showAuthGate(authGateHandlers(auth, { recovery: true }));
     return;
   }
 
-  const saved = localStorage.getItem(NICK_KEY) || displayName(user);
+  // No session: ask who you are. Nothing is ever created behind your back.
+  if (!user) {
+    showAuthGate(authGateHandlers(auth, { error: urlState?.error || null }));
+    return;
+  }
+  auth.cleanUrl();
+
+  const saved = localStorage.getItem(NICK_KEY) || auth.displayName(user);
   $("#createNick").value = saved;
   $("#joinNick").value = saved;
 
@@ -71,13 +67,13 @@ async function boot() {
   // about — say who you are signed in as and move on.
   const sessionLine = $("#sessionLine");
   if (sessionLine) {
-    sessionLine.innerHTML = `Signed in as <strong>${escapeHtml(userEmail(user) || displayName(user))}</strong> — your rooms follow this account, on any device.`;
+    sessionLine.innerHTML = `Signed in as <strong>${escapeHtml(auth.userEmail(user) || auth.displayName(user))}</strong> — your rooms follow this account, on any device.`;
   }
 
   const signOutBtn = $("#signOutBtn");
   if (signOutBtn) {
     signOutBtn.hidden = false;
-    signOutBtn.onclick = async () => { await signOut(); location.reload(); };
+    signOutBtn.onclick = async () => { await auth.signOut(); location.reload(); };
   }
 
   $("#createBtn").onclick = onCreate;

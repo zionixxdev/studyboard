@@ -4,10 +4,9 @@ A real-time collaborative study portal. Spin up a room, share a link, and work
 through problems together on a shared whiteboard with group chat, a
 server-synchronised focus timer, file sharing, maths tools and voice/video.
 
-Sign-in is **Google-only by default**, so your rooms, boards and files follow
-your account — across devices, and after clearing your browser data. An
-account-free mode still exists for the original "join with just a nickname"
-flow; see `AUTH_MODE` in §4.
+Sign-in is a real account — **email + password, or Google** — so your rooms,
+boards and files follow you across devices and survive clearing your browser
+data.
 
 Built as a **zero-build, zero-cost** Progressive Web App: a static frontend you
 can host on GitHub Pages, backed by Supabase (Postgres + RLS + Realtime +
@@ -98,29 +97,34 @@ files, which is what makes it a free, build-free static site on any host.
    The migrations create every table, index, RLS policy, secure RPC, the
    Realtime publication and the private `room-files` storage bucket.
 
-3. **Enable Google sign-in** — *required by default*.
+3. **Turn on sign-in.** The app supports email + password and Google.
 
-   In the [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
-   create an **OAuth client ID** of type **Web application**, and add this as an
+   **Email + password** works out of the box, but check two settings under
+   **Authentication → Sign In / Providers → Email**:
+   - **Confirm email** — if ON (Supabase's default), a new user must click the
+     link in their inbox before they can sign in. The app says so plainly.
+     Turn it OFF for a frictionless start; leave it ON if you want verified
+     addresses.
+   - **Minimum password length** — the UI enforces 6 characters.
+
+   **Google (optional).** In the
+   [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+   create an **OAuth client ID** of type **Web application** with this
    **Authorised redirect URI**:
 
    ```
    https://<your-project-ref>.supabase.co/auth/v1/callback
    ```
 
-   Copy the **Client ID** and **Client secret**, then in Supabase go to
+   Copy the Client ID and secret, then in Supabase go to
    **Authentication → Sign In / Providers → Google**, enable it, paste both, and
    Save.
 
    Finally, in **Authentication → URL Configuration**, set the **Site URL** and
    add every URL the app is served from to **Redirect URLs** — e.g.
-   `http://localhost:8080/**` and `https://<you>.github.io/<repo>/**`. OAuth
-   returns to your app through this list, so a missing entry is the usual cause
-   of a redirect error after signing in.
-
-   *Optional:* to restore the account-free flow, also enable **Anonymous
-   sign-ins** and set `AUTH_MODE = "google-or-anonymous"` in `js/config.js`.
-   Identity then lives only in that browser's storage.
+   `http://localhost:8080/**` and `https://<you>.github.io/<repo>/**`. Sign-in
+   redirects and password-reset links both come back through this list, so a
+   missing entry is the usual cause of a redirect error.
 
 4. **(Recommended) Add a site URL** under Authentication → URL Configuration so
    redirects and rate limits behave on your deployed domain.
@@ -234,11 +238,11 @@ rather than promised away:
 - **Live collaboration does not work offline.** Drawings, chat, the timer and
   calls all sync through the server. The offline shell shows already-loaded
   content and explains this; unsent local work is kept where feasible.
-- **The account-free mode is browser-bound.** With Google sign-in, identity is
-  durable and none of this applies. If you switch `AUTH_MODE` to
-  `"google-or-anonymous"`, an anonymous identity lives only in that browser's
-  storage: clearing site data loses ownership of rooms created under it. That
-  is the trade-off for "no account required to join".
+- **An account is required.** Email + password or Google, by design. The
+  earlier account-free mode tied identity to a single browser's storage, so
+  clearing site data silently made you a stranger to your own rooms. Invited
+  friends must sign in too, so they now need an account where they previously
+  needed only a nickname.
 - **Supabase free-tier quotas** apply (database size, storage, bandwidth,
   Realtime concurrent connections, and a project that pauses after ~1 week of
   inactivity). `public.cleanup_old_rooms(days)` is provided for retention —

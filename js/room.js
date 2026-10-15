@@ -4,10 +4,7 @@
 // the server-authoritative RPCs to the UI.
 // =============================================================================
 import { sb } from "./supabase-client.js";
-import {
-  requireSession, signInWithGoogle, signInAnonymously, signOut,
-  anonymousAllowed, displayName, userEmail,
-} from "./auth.js";
+import * as auth from "./auth.js";
 import {
   $, $$, escapeHtml, randomId, fmtTime, fmtClock, fmtBytes,
   colorFor, initials, throttle, renderMessageBody,
@@ -15,8 +12,9 @@ import {
 } from "./util.js";
 import {
   initTheme, initOnlineBanner, initInstallPrompt, registerServiceWorker,
-  showAuthGate, toast, setConn, openModal, confirmDialog, promptDialog,
+  toast, setConn, openModal, confirmDialog, promptDialog,
 } from "./ui.js";
+import { showAuthGate, authGateHandlers } from "./auth-ui.js";
 import { Whiteboard, PALETTE } from "./whiteboard.js";
 import { createChat } from "./chat.js";
 import { createTimer } from "./timer.js";
@@ -55,29 +53,27 @@ const params = new URLSearchParams(location.search);
 main();
 
 async function main() {
+  const urlState = auth.initialUrlState();
   let user = null;
   try {
-    user = await requireSession();
+    user = await auth.requireSession();
   } catch (e) {
     toast(e.message, "error");
     return;
   }
 
-  // A stable identity is the whole point of the sign-in gate here: without one,
-  // a room cannot tell that you are its owner.
-  if (!user) {
-    showAuthGate({
-      message: "Sign in to open this study room. A stable identity is what lets the room recognise you as its owner or a member.",
-      onGoogle: () => signInWithGoogle(location.href),
-      onAnonymous: anonymousAllowed()
-        ? async () => {
-            try { await signInAnonymously(); location.reload(); }
-            catch (e) { toast(e.message, "error"); }
-          }
-        : null,
-    });
+  if (urlState?.type === "recovery") {
+    showAuthGate(authGateHandlers(auth, { recovery: true }));
     return;
   }
+
+  // Without an identity a room cannot tell whether you are its owner. Ask who
+  // you are rather than guessing.
+  if (!user) {
+    showAuthGate(authGateHandlers(auth, { error: urlState?.error || null }));
+    return;
+  }
+  auth.cleanUrl();
   me = user.id;
 
   let roomId = params.get("room");
@@ -90,23 +86,11 @@ async function main() {
   }
   if (!roomId) { toast("No room specified.", "error"); location.href = "index.html"; return; }
 
-  const resolved = await resolveMembership(roomId);
-  myMember = resolved.member;
-
-  if (!myMember) {
-    // Never ask the person who just created a room for an invite code to it.
-    // If their membership cannot be confirmed that is a fault to report, not a
-    // prompt to show them.
-    if (justCreated) { showMembershipProblem(roomId, resolved.error); return; }
-
-    const ok = await joinExisting(roomId, inviteCode);
-    if (!ok) { location.href = "index.html"; return; }
-    myMember = (await resolveMembership(roomId)).member;
-  }
-  if (!myMember) { showMembershipProblem(roomId, resolved.error); return; }
+  const ctx = await enterRoom(roomId, { justCreated, inviteCode });
+  if (!ctx) return;
 
   myColor = colorFor(me);
-  await startRoom(roomId);
+  await startRoom(roomId, ctx);
 }
 
 // --------------------------------------------------------------- entry paths
@@ -136,7 +120,7 @@ async function joinExisting(roomId, code) {
 }
 
 async function askNickname() {
-  const saved = localStorage.getItem(NICK_KEY) || displayName();
+  const saved = localStorage.getItem(NICK_KEY) || auth.displayName();
   const nick = await promptDialog({
     title: "Pick a nickname",
     label: "How should others see you?",
@@ -147,52 +131,61 @@ async function askNickname() {
   return nick;
 }
 
-// Returns { member, error }. The distinction matters: an error (network, or the
-// auth token not attached yet) must never be mistaken for "not a member", which
-// is exactly what used to make the app demand an invite code from a room's own
-// creator.
-async function fetchMembership(roomId) {
-  try {
-    const { data, error } = await sb
-      .from("room_members")
-      .select("user_id, nickname, role, room_id")
-      .eq("room_id", roomId)
-      .eq("user_id", me)
-      .maybeSingle();
-    if (error) return { member: null, error };
-    return { member: data || null, error: null };
-  } catch (e) {
-    return { member: null, error: e };
-  }
-}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function resolveMembership(roomId, tries = 3) {
-  let last = { member: null, error: null };
-  for (let i = 0; i < tries; i++) {
-    last = await fetchMembership(roomId);
-    if (last.member) return last;
-    if (!last.error) return last;              // a clean "no row" — retrying won't help
-    await new Promise((r) => setTimeout(r, 250 * (i + 1)));   // transient: back off and retry
+// Server-authoritative entry. One RPC answers "what is my relationship to this
+// room?", and the three possible answers are handled differently:
+//   not signed in  -> sign in again (never an invite-code prompt)
+//   not a member   -> offer the invite code
+//   a member       -> open the room
+// Conflating the first two is what used to demand a code from a room's owner.
+async function enterRoom(roomId, { justCreated, inviteCode }) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let data = null, error = null;
+    try {
+      ({ data, error } = await sb.rpc("get_room_context", { p_room: roomId }));
+    } catch (e) { error = e; }
+
+    if (error) {
+      if (auth.isAuthError(error)) {
+        await auth.signOut();
+        showAuthGate(authGateHandlers(auth, {
+          notice: "Your session had expired, so you were signed out. Please sign in again.",
+        }));
+        return null;
+      }
+      if (attempt < 2) { await sleep(300 * (attempt + 1)); continue; }
+      showMembershipProblem(roomId, error);
+      return null;
+    }
+
+    if (data && data.room && data.member) return data;
+
+    // Genuinely not a member of this room (or the room is gone).
+    if (justCreated) { showMembershipProblem(roomId, null); return null; }
+
+    const ok = await joinExisting(roomId, inviteCode || null);
+    if (!ok) { location.href = "index.html"; return null; }
+    // Joined — loop once more to confirm, then open.
   }
-  return last;
+  showMembershipProblem(roomId, null);
+  return null;
 }
 
 // Shown instead of an invite-code prompt. Says what actually went wrong and
 // what to check, rather than asking the user for something they cannot know.
 function showMembershipProblem(roomId, error) {
-  const uid = me ? String(me).slice(0, 8) : "none";
+  const who = auth.userEmail() || auth.displayName();
   openModal({
     title: "Couldn't open this room",
     html: `
-      <p>This browser isn't recognised as a member of this room — and since you
-      created it, you should not need an invite code. So you aren't being asked
-      for one.</p>
-      <p class="small muted">The usual cause is the browser losing its anonymous
-      session between pages, so it is now a different identity from the one that
-      created the room.</p>
+      <p>This account isn't recognised as a member of this room.</p>
+      <p class="small muted">If you just created it, something went wrong between
+      creating the room and opening it. You should never need an invite code for
+      your own room, so you aren't being asked for one.</p>
       <ul class="small muted">
         <li>Room: <code>${escapeHtml(String(roomId).slice(0, 8))}…</code></li>
-        <li>Signed in as: <code>${escapeHtml(uid)}…</code></li>
+        <li>Signed in as: <code>${escapeHtml(who)}</code></li>
         ${error ? `<li>Lookup error: <code>${escapeHtml(error.message || String(error))}</code></li>` : ""}
       </ul>
       <p class="small muted">Open the home page and look at <strong>Your rooms</strong>.
@@ -209,9 +202,9 @@ function showMembershipProblem(roomId, error) {
 }
 
 // ------------------------------------------------------------------- startup
-async function startRoom(roomId) {
-  room = await loadRoom(roomId);
-  if (!room) { toast("Room not found or you are not a member.", "error"); location.href = "index.html"; return; }
+async function startRoom(roomId, ctx) {
+  room = ctx.room;
+  myMember = ctx.member;
 
   $("#roomName").textContent = room.name;
   document.title = room.name + " — StudyBoard";
@@ -271,14 +264,6 @@ async function startRoom(roomId) {
     sb.rpc("touch_presence", { p_room: roomId }).catch(() => {});
     trackPresence();
   }, 30000);
-}
-
-async function loadRoom(roomId) {
-  const { data, error } = await sb.from("rooms")
-    .select("id, name, owner_id, is_locked, settings, created_at, last_active_at")
-    .eq("id", roomId).maybeSingle();
-  if (error || !data) return null;
-  return data;
 }
 
 function applyRoom(newRoom) {
@@ -836,9 +821,9 @@ function renderCall({ inCall, peers, streams }) {
 
 // ------------------------------------------------------------ settings panel
 function wireSettings() {
-  $("#settingsNote").textContent = "Signed in as " + (userEmail() || displayName()) + ".";
+  $("#settingsNote").textContent = "Signed in as " + (auth.userEmail() || auth.displayName()) + ".";
   const signOutBtn = $("#signOutBtn");
-  if (signOutBtn) signOutBtn.onclick = async () => { await signOut(); location.href = "index.html"; };
+  if (signOutBtn) signOutBtn.onclick = async () => { await auth.signOut(); location.href = "index.html"; };
 
   $("#setName").value = room.name;
   $("#setLocked").checked = !!room.is_locked;

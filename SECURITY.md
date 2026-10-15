@@ -13,11 +13,10 @@ verified against a live database.
   design. It grants nothing on its own — Row Level Security is what constrains
   access. The `service_role` key and database password are **never** in frontend
   code.
-- **Identity is a Google account** (by default). Supabase verifies the Google
-  ID token server-side and issues its own session; the app only ever sees
-  `auth.uid()`. A user id is therefore durable and not a bearer credential tied
-  to one browser. If `AUTH_MODE = "google-or-anonymous"`, an anonymous user id
-  *is* browser-bound and should be treated as a bearer credential.
+- **Identity is a real account** — email + password, or Google. Supabase
+  verifies credentials server-side and issues its own session; the app only ever
+  sees `auth.uid()`. A user id is therefore durable and is not a bearer
+  credential tied to one browser.
 
 ## 2. Controls
 
@@ -107,8 +106,9 @@ Every one of these held:
 
 ## 4. Known limitations (accepted, by design)
 
-- **Only the account-free mode is browser-bound.** With Google sign-in there is
-  no such loss; that mode is off by default for exactly this reason.
+- **An account is mandatory.** There is no account-free mode: browser-local
+  anonymous identity made rooms unreachable after any storage change, which is
+  the failure this design removes.
 - **No end-to-end encryption** of board/chat content; data is protected by RLS
   and TLS in transit, and readable by the project operator.
 - **No TURN server** is provided, so some restrictive networks cannot place

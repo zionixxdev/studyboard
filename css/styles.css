@@ -231,6 +231,20 @@ label { display: block; font-size: .86rem; color: var(--muted); margin: .7rem 0 
 .skeleton { background: linear-gradient(90deg, var(--panel-2), var(--border), var(--panel-2)); background-size: 200% 100%; animation: sk 1.2s infinite; border-radius: var(--radius-sm); height: 1rem; }
 @keyframes sk { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
+/* ---------- auth gate ---------- */
+.auth-modal { max-width: 420px; }
+.auth-brand { display: flex; align-items: center; gap: .5rem; font-weight: 800; margin-bottom: .7rem; }
+.auth-brand .logo { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: #04211f; font-weight: 900; }
+.auth-tabs { display: flex; gap: .25rem; background: var(--panel-2); padding: .25rem; border-radius: 999px; margin-bottom: .8rem; }
+.auth-tab { flex: 1; border: none; background: transparent; color: var(--muted); font: inherit; font-weight: 600; padding: .45rem; border-radius: 999px; cursor: pointer; }
+.auth-tab.active { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+.auth-msg { font-size: .86rem; font-weight: 600; padding: .55rem .7rem; border-radius: var(--radius-sm); margin: .6rem 0; }
+.auth-msg.err { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+.auth-msg.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.auth-or { display: flex; align-items: center; gap: .6rem; color: var(--muted); font-size: .78rem; margin: 1rem 0 .7rem; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.auth-wide { width: 100%; justify-content: center; }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
