@@ -135,10 +135,10 @@
         <label class="row" style="gap:.5rem"><input type="checkbox" id="setLocked" style="width:auto;min-height:auto" /> Lock room (block new joins)</label>
         <hr style="border:none;border-top:1px solid var(--border);margin:1rem 0" />
         <h3>Invitations</h3>
-        <p class="small muted">Only a hash of each code is stored. Rotating revokes every existing link.</p>
+        <p class="small muted">Only a hash of each code is stored on the server, so the full link is shown by <strong>Invite</strong> and kept in this browser. Generating a new one revokes every existing link.</p>
         <div class="row wrap">
-          <button class="btn sm" id="rotateInvite">Rotate invite link</button>
-          <button class="btn sm" id="copyInvite">Copy current link</button>
+          <button class="btn sm primary" id="copyInvite">Show invite link</button>
+          <button class="btn sm" id="rotateInvite">Generate new link</button>
         </div>
         <div id="inviteList" class="small" style="margin-top:.6rem"></div>
         <hr style="border:none;border-top:1px solid var(--border);margin:1rem 0" />

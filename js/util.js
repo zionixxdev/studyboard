@@ -70,6 +70,27 @@ export function sanitizeFilename(name) {
     .slice(0, 120);
 }
 
+// ---- invite codes -----------------------------------------------------------
+// Only the SHA-256 hash of an invite code is stored on the server, so the
+// plaintext exists solely in the share link. The owner's own browser keeps a
+// copy here — localStorage rather than sessionStorage, so the link is still
+// there after closing the tab. One helper, used by both pages, so the storage
+// key can never drift apart again.
+const INVITE_KEY = (roomId) => "sb-invite-" + roomId;
+
+export function saveInviteCode(roomId, code) {
+  if (!roomId || !code) return;
+  try { localStorage.setItem(INVITE_KEY(roomId), String(code).toUpperCase()); } catch {}
+}
+
+export function loadInviteCode(roomId) {
+  try { return localStorage.getItem(INVITE_KEY(roomId)); } catch { return null; }
+}
+
+export function inviteLink(code) {
+  return new URL("room.html?invite=" + String(code).toUpperCase(), location.href).toString();
+}
+
 // Minimal, safe linkifier + inline LaTeX renderer for chat. Everything is
 // escaped first; only http(s) links are turned into anchors.
 export function renderMessageBody(text, renderMath) {

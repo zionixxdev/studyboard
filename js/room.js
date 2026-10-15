@@ -8,6 +8,7 @@ import { ensureSession } from "./auth.js";
 import {
   $, $$, escapeHtml, randomId, fmtTime, fmtClock, fmtBytes,
   colorFor, initials, throttle, renderMessageBody,
+  saveInviteCode, loadInviteCode, inviteLink,
 } from "./util.js";
 import {
   initTheme, initOnlineBanner, initInstallPrompt, toast, setConn,
@@ -85,7 +86,7 @@ async function joinViaInvite(code) {
   try {
     const { data, error } = await sb.rpc("join_room", { p_code: code.toUpperCase(), p_nickname: nick });
     if (error) throw error;
-    rememberCode(data, code);
+    saveInviteCode(data, code);
     history.replaceState(null, "", "room.html?room=" + encodeURIComponent(data));
     return data;
   } catch (e) { toast(friendly(e), "error"); return null; }
@@ -99,7 +100,7 @@ async function joinExisting(roomId, code) {
   try {
     const { data, error } = await sb.rpc("join_room", { p_code: c.toUpperCase(), p_nickname: nick });
     if (error) throw error;
-    rememberCode(roomId, c);
+    saveInviteCode(roomId, c);
     return true;
   } catch (e) { toast(friendly(e), "error"); return false; }
 }
@@ -125,13 +126,6 @@ async function getMyMembership(roomId) {
     .maybeSingle();
   if (error) return null;
   return data || null;
-}
-
-function rememberCode(roomId, code) {
-  try { sessionStorage.setItem("sb-invite-" + roomId, code.toUpperCase()); } catch {}
-}
-function recallCode(roomId) {
-  try { return sessionStorage.getItem("sb-invite-" + roomId); } catch { return null; }
 }
 
 // ------------------------------------------------------------------- startup
@@ -184,6 +178,13 @@ async function startRoom(roomId) {
   wireKeyboard();
 
   board.fit();
+
+  // A freshly created room: put the invite link in front of the owner at once,
+  // rather than leaving it hidden behind a button they have no reason to trust.
+  if (params.get("new") === "1" && myMember.role === "owner") {
+    history.replaceState(null, "", "room.html?room=" + encodeURIComponent(roomId));
+    shareInvite({ auto: true });
+  }
 
   // ---- heartbeat (presence + last_seen)
   heartbeat = setInterval(() => {
@@ -773,13 +774,12 @@ function wireSettings() {
   };
 
   $("#rotateInvite").onclick = async () => {
-    if (!await confirmDialog({ title: "Rotate invite link", body: "Every existing invitation link stops working immediately.", confirmText: "Rotate" })) return;
+    if (!await confirmDialog({ title: "Generate a new invite link", body: "Every existing invitation link stops working immediately.", confirmText: "Generate" })) return;
     const { data, error } = await sb.rpc("rotate_invite", { p_room: room.id });
     if (error) { toast(error.message, "error"); return; }
-    rememberCode(room.id, data);
-    toast("New invite link ready.", "ok");
+    saveInviteCode(room.id, data);
     await renderInvites();
-    shareInvite();
+    showInviteDialog(data, inviteLink(data), {});
   };
 
   $("#copyInvite").onclick = () => shareInvite();
@@ -822,24 +822,76 @@ async function renderInvites() {
   });
 }
 
-async function shareInvite() {
-  let code = recallCode(room.id);
+async function shareInvite({ auto = false } = {}) {
+  let code = loadInviteCode(room.id);
   if (!code) {
-    if (myMember.role !== "owner") { toast("Ask the room owner to share an invite link.", "error"); return; }
-    if (!await confirmDialog({ title: "No active code stored", body: "Only a hash of each code is kept, so the current link cannot be shown. Generate a fresh one?", confirmText: "Generate" })) return;
+    if (myMember.role !== "owner") {
+      toast("Only the room owner can create invite links — ask them to share one.", "error");
+      return;
+    }
+    // Only hashes are stored, so an owner whose link was lost mints a fresh one.
     const { data, error } = await sb.rpc("rotate_invite", { p_room: room.id });
     if (error) { toast(error.message, "error"); return; }
-    code = data; rememberCode(room.id, code);
+    code = data;
+    saveInviteCode(room.id, code);
     await renderInvites();
   }
-  const link = new URL("room.html?invite=" + code, location.href).toString();
-  try {
-    if (navigator.share) { await navigator.share({ title: room.name, text: "Join my StudyBoard room", url: link }); return; }
-    await navigator.clipboard.writeText(link);
-    toast("Invite link copied.", "ok");
-  } catch {
-    await promptDialog({ title: "Invite link", label: "Share this link", value: link, maxlength: 400 });
-  }
+  showInviteDialog(code, inviteLink(code), { auto });
+}
+
+// Always *shows* the link rather than silently copying it — the invite code is
+// the one thing a new owner cannot find again, so it must be visible.
+function showInviteDialog(code, link, { auto = false } = {}) {
+  const isOwner = myMember.role === "owner";
+  openModal({
+    title: auto ? "Room created — invite your friends" : "Invite to " + room.name,
+    html: `
+      <p class="small muted">Send this link to anyone you want in the room. They open it, pick a nickname, and they are in — no account needed.</p>
+      <div class="row" style="margin-top:.6rem">
+        <input class="input" id="invLink" readonly value="${escapeHtml(link)}" />
+        <button class="btn primary" id="invCopy">Copy</button>
+      </div>
+      <div class="row wrap" style="margin-top:.6rem">
+        <button class="btn" id="invShare">Share…</button>
+        <button class="btn" id="invWhats">WhatsApp</button>
+        ${isOwner ? `<button class="btn danger" id="invNew">Generate a new link</button>` : ""}
+      </div>
+      <p class="small muted" style="margin-top:.9rem">
+        Invitation code: <strong>${escapeHtml(code)}</strong>. Only a hash of it is stored on the
+        server, so this link lives in this browser and in whatever you send it with — keep a copy.
+        ${isOwner ? "Generating a new link stops every old one working immediately." : ""}
+      </p>`,
+    wire(root, close) {
+      const inp = root.querySelector("#invLink");
+      inp.focus(); inp.select();
+      root.querySelector("#invCopy").onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(link);
+          toast("Invite link copied.", "ok");
+        } catch {
+          inp.select();
+          try { document.execCommand("copy"); toast("Invite link copied.", "ok"); }
+          catch { toast("Select the link and copy it manually.", "error"); }
+        }
+      };
+      root.querySelector("#invShare").onclick = async () => {
+        try { await navigator.share({ title: room.name, text: "Join my StudyBoard room", url: link }); }
+        catch { /* dismissed or unsupported */ }
+      };
+      root.querySelector("#invWhats").onclick = () => {
+        window.open("https://wa.me/?text=" + encodeURIComponent("Join my StudyBoard room: " + link), "_blank", "noopener");
+      };
+      const newBtn = root.querySelector("#invNew");
+      if (newBtn) newBtn.onclick = async () => {
+        const { data, error } = await sb.rpc("rotate_invite", { p_room: room.id });
+        if (error) { toast(error.message, "error"); return; }
+        saveInviteCode(room.id, data);
+        await renderInvites();
+        close(null);
+        showInviteDialog(data, inviteLink(data), {});
+      };
+    },
+  });
 }
 
 // ---------------------------------------------------------------- toolbar/UI

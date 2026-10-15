@@ -3,7 +3,7 @@
 // =============================================================================
 import { sb } from "./supabase-client.js";
 import { ensureSession } from "./auth.js";
-import { $, escapeHtml, fmtClock } from "./util.js";
+import { $, escapeHtml, fmtClock, saveInviteCode } from "./util.js";
 import { initTheme, initOnlineBanner, initInstallPrompt, toast, setConn } from "./ui.js";
 import { MAX_ROOM_NAME_LEN, MAX_NICK_LEN, REPO_URL } from "./config.js";
 
@@ -64,9 +64,11 @@ async function onCreate() {
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
     rememberNick(nick);
-    const code = row?.invite_code;
-    sessionStorage.setItem("sb-last-invite-" + row.room_id, code || "");
-    location.href = "room.html?room=" + encodeURIComponent(row.room_id);
+    // Capture the plaintext code now: only its hash is stored server-side, so
+    // this is the one moment it exists. `new=1` makes the room open its invite
+    // dialog straight away so the link is not left hidden behind a button.
+    saveInviteCode(row.room_id, row?.invite_code);
+    location.href = "room.html?room=" + encodeURIComponent(row.room_id) + "&new=1";
   } catch (e) {
     msg.textContent = friendly(e);
   } finally { busy(btn, false); }
