@@ -61,12 +61,19 @@ Open <http://localhost:8080>.
 The repo ships with a working `js/config.js` pointing at the reference Supabase
 project, so it runs immediately. To point at **your own** project, see §4.
 
-### Generating `js/config.js` from `.env`
+### Configuring `js/config.js`
+
+There is no build step and nothing injects environment variables: the browser
+reads `js/config.js` at runtime, so you edit that file directly.
 
 ```bash
-cp .env.example .env         # fill in your project URL + anon key
-node scripts/gen-config.mjs  # writes js/config.js
+cp config.example.js js/config.js   # then fill in your URL + anon key
 ```
+
+The publishable/anon key is safe to commit — it is public by design, and RLS is
+what protects the data. Keep only the `service_role` key out of the frontend.
+There is deliberately **no** `package.json`: the project is a plain folder of
+files, which is what makes it a free, build-free static site on any host.
 
 ---
 
@@ -151,7 +158,6 @@ studyboard/
 │   └── math-tools.js          # equation editor, plotter, formula reference
 ├── icons/                     # PWA icons
 ├── supabase/migrations/       # 0001…0005 — schema, RLS, RPCs, storage, realtime
-├── scripts/gen-config.mjs     # .env → js/config.js
 ├── docs/architecture.md       # architecture + component responsibilities
 ├── docs/realtime.md           # event taxonomy & sync design
 ├── SECURITY.md · TESTING.md · DEPLOYMENT.md

@@ -4,12 +4,13 @@
 import { sb } from "./supabase-client.js";
 import { ensureSession } from "./auth.js";
 import { $, escapeHtml, fmtClock, saveInviteCode } from "./util.js";
-import { initTheme, initOnlineBanner, initInstallPrompt, toast, setConn } from "./ui.js";
+import { initTheme, initOnlineBanner, initInstallPrompt, registerServiceWorker, toast, setConn } from "./ui.js";
 import { MAX_ROOM_NAME_LEN, MAX_NICK_LEN, REPO_URL } from "./config.js";
 
 initTheme();
 initOnlineBanner();
 initInstallPrompt();
+registerServiceWorker();
 
 const NICK_KEY = "sb-nickname";
 

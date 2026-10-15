@@ -134,3 +134,14 @@ export function initInstallPrompt() {
     deferred = null;
   });
 }
+
+// Registers the service worker that makes the app installable and gives it the
+// offline shell. Without this the manifest alone does nothing. Failures are
+// ignored: registration is refused on file:// and in some sandboxed contexts,
+// and the app works fine without it.
+export function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}

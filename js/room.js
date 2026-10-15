@@ -11,8 +11,8 @@ import {
   saveInviteCode, loadInviteCode, inviteLink,
 } from "./util.js";
 import {
-  initTheme, initOnlineBanner, initInstallPrompt, toast, setConn,
-  openModal, confirmDialog, promptDialog,
+  initTheme, initOnlineBanner, initInstallPrompt, registerServiceWorker,
+  toast, setConn, openModal, confirmDialog, promptDialog,
 } from "./ui.js";
 import { Whiteboard, PALETTE } from "./whiteboard.js";
 import { createChat } from "./chat.js";
@@ -28,6 +28,7 @@ import { MAX_NICK_LEN } from "./config.js";
 initTheme();
 initOnlineBanner();
 initInstallPrompt();
+registerServiceWorker();
 
 const NICK_KEY = "sb-nickname";
 

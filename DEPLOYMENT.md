@@ -39,11 +39,10 @@ Two independent pieces: a **static frontend** (GitHub Pages) and a **backend**
 `.nojekyll` is present so all files are served verbatim.
 
 ### Point the frontend at your backend
-Edit `js/config.js` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`), or generate it:
-```bash
-cp .env.example .env      # fill in
-node scripts/gen-config.mjs
-```
+Edit `js/config.js` and set `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+
+There is no build step, so nothing injects these for you — the browser reads the
+file at runtime. `config.example.js` is a template to copy from.
 
 ---
 
