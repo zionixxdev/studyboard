@@ -90,8 +90,10 @@ body {
   width: 46vmax;
   height: 46vmax;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.55;
+  /* No filter: blur() here. A large blurred, animated layer is one of the most
+     expensive things you can ask a mobile GPU to composite, and the radial
+     gradients below are already soft-edged without it. */
+  opacity: 0.75;
   will-change: transform;
 }
 
@@ -158,11 +160,13 @@ body {
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgb(var(--glass-highlight) / 0.16);
   }
 
+  /* Deliberately no backdrop-filter: this class is used on the most numerous
+     surfaces (inputs, buttons, message bubbles, small panels) and a blur on
+     every one of them is the single biggest cause of jank on phones. A slightly
+     more opaque translucent fill reads the same against the ambient background. */
   .glass-subtle {
-    background: rgb(var(--glass-bg) / 0.32);
+    background: rgb(var(--glass-bg) / 0.45);
     border: 1px solid rgb(var(--glass-border) / 0.1);
-    backdrop-filter: blur(calc(var(--glass-blur) - 6px)) saturate(var(--glass-saturate));
-    -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 6px)) saturate(var(--glass-saturate));
   }
 
   /* A soft specular highlight sweep across the top edge of a glass surface. */
@@ -192,6 +196,25 @@ body {
   }
   .focus-ring:focus-visible {
     box-shadow: 0 0 0 2px rgb(var(--app-bg-1)), 0 0 0 4px rgb(var(--accent) / 0.7);
+  }
+}
+
+/* ==========================================================================
+   Performance: mobile GPUs pay dearly for large blurs and animated
+   compositing. Trim the expensive effects on small screens while keeping the
+   glass look intact.
+   ========================================================================== */
+@media (max-width: 820px) {
+  :root,
+  .dark {
+    --glass-blur: 8px;
+  }
+
+  /* Freeze the ambient blobs — a static gradient costs nothing to composite. */
+  .app-ambient::before,
+  .app-ambient::after {
+    animation: none !important;
+    opacity: 0.5;
   }
 }
 

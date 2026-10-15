@@ -130,7 +130,12 @@ export default function Whiteboard({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const offscreenRef = useRef<HTMLCanvasElement | null>(null);
+  // The grid is static for a given view, so it is rendered once into its own
+  // layer and blitted — instead of redrawing every dot on every pointer move.
+  const gridCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const rafPaintRef = useRef<number | null>(null);
+  const rafRenderRef = useRef<number | null>(null);
 
   const opsRef = useRef<WhiteboardOp[]>([]);
   const redoRef = useRef<WhiteboardOp[]>([]);
@@ -139,7 +144,13 @@ export default function Whiteboard({
   const startRef = useRef<[number, number]>([0, 0]);
 
   const viewRef = useRef<View>({ scale: 1, x: 0, y: 0 });
-  const dpr = useMemo(() => Math.min(window.devicePixelRatio || 1, 2), []);
+  // Cap the backing-store resolution. Phones report devicePixelRatio 3, which
+  // makes a very large canvas that is expensive to clear and blit every frame.
+  const dpr = useMemo(() => {
+    const raw = window.devicePixelRatio || 1;
+    const cap = window.innerWidth <= 820 ? 1.5 : 2;
+    return Math.min(raw, cap);
+  }, []);
 
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
@@ -149,11 +160,24 @@ export default function Whiteboard({
   const [grid, setGrid] = useState(true);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [cursors, setCursors] = useState<Record<string, RemoteCursor>>({});
+  // Remote cursors are drawn imperatively onto the canvas, so they live in a ref
+  // rather than React state — an incoming cursor must not trigger a re-render.
+  const cursorsRef = useRef<Record<string, RemoteCursor>>({});
 
   const lastCursorSent = useRef(0);
 
   /* ----------------------------- rendering ----------------------------- */
+
+  /** Render the static grid into its own layer (only when the view changes). */
+  const renderGrid = useCallback(() => {
+    const gc = gridCanvasRef.current;
+    if (!gc) return;
+    const gctx = gc.getContext('2d');
+    if (!gctx) return;
+    gctx.setTransform(1, 0, 0, 1, 0, 0);
+    gctx.clearRect(0, 0, gc.width, gc.height);
+    if (grid) drawGrid(gctx, gc, viewRef.current, dpr);
+  }, [grid, dpr]);
 
   const rerender = useCallback(() => {
     const canvas = canvasRef.current;
@@ -175,11 +199,12 @@ export default function Whiteboard({
         drawOp(octx, op);
       }
     }
+    renderGrid();
     paint();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dpr]);
+  }, [dpr, renderGrid]);
 
-  /** Blit the committed layer and overlay the in-progress op + cursors. */
+  /** Blit the committed layers and overlay the in-progress op + cursors. */
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
     const off = offscreenRef.current;
@@ -190,9 +215,8 @@ export default function Whiteboard({
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (grid) {
-      drawGrid(ctx, canvas, viewRef.current, dpr);
-    }
+    const gc = gridCanvasRef.current;
+    if (grid && gc) ctx.drawImage(gc, 0, 0);
     ctx.drawImage(off, 0, 0);
 
     applyTransform(ctx, viewRef.current, dpr);
@@ -200,7 +224,7 @@ export default function Whiteboard({
 
     // Remote cursors, drawn in world space so they track pan/zoom.
     const now = Date.now();
-    for (const [, c] of Object.entries(cursors)) {
+    for (const [, c] of Object.entries(cursorsRef.current)) {
       if (now - c.at > 8000) continue;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       const sx = c.x * viewRef.current.scale * dpr + viewRef.current.x * dpr;
@@ -214,7 +238,25 @@ export default function Whiteboard({
       ctx.fillText(c.name, sx + 8 * dpr, sy + 4 * dpr);
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-  }, [grid, cursors, dpr]);
+  }, [grid, dpr]);
+
+  /** Coalesce repaint requests so drawing costs at most one repaint per frame. */
+  const schedulePaint = useCallback(() => {
+    if (rafPaintRef.current !== null) return;
+    rafPaintRef.current = window.requestAnimationFrame(() => {
+      rafPaintRef.current = null;
+      paint();
+    });
+  }, [paint]);
+
+  /** Same, for full re-bakes (pan/zoom), which are the most expensive path. */
+  const scheduleRerender = useCallback(() => {
+    if (rafRenderRef.current !== null) return;
+    rafRenderRef.current = window.requestAnimationFrame(() => {
+      rafRenderRef.current = null;
+      rerender();
+    });
+  }, [rerender]);
 
   /** Commit an op locally and broadcast it. */
   const commit = useCallback(
@@ -279,6 +321,10 @@ export default function Whiteboard({
     offscreenRef.current.width = canvas.width;
     offscreenRef.current.height = canvas.height;
 
+    if (!gridCanvasRef.current) gridCanvasRef.current = document.createElement('canvas');
+    gridCanvasRef.current.width = canvas.width;
+    gridCanvasRef.current.height = canvas.height;
+
     rerender();
   }, [dpr, rerender]);
 
@@ -314,6 +360,12 @@ export default function Whiteboard({
     };
   }, [resize]);
 
+  // Re-bake the cached grid layer when the grid is toggled.
+  useEffect(() => {
+    renderGrid();
+    paint();
+  }, [grid, renderGrid, paint]);
+
   // Inbound realtime events for the board.
   useEffect(() => {
     return realtime.subscribe((e: RealtimeEvent) => {
@@ -323,17 +375,21 @@ export default function Whiteboard({
         rerender();
         bump();
       } else if (e.type === 'cursor') {
-        setCursors((prev) => ({
-          ...prev,
+        cursorsRef.current = {
+          ...cursorsRef.current,
           [e.sender]: { x: e.x, y: e.y, name: e.sender || 'Peer', at: Date.now() },
-        }));
+        };
+        schedulePaint();
       }
     });
-  }, [realtime, applyRemote, rerender]);
+  }, [realtime, applyRemote, rerender, schedulePaint]);
 
-  // Repaint cursors periodically so stale ones fade out.
+  // Repaint periodically only while remote cursors are on screen (so they fade
+  // out) — an idle board costs nothing.
   useEffect(() => {
-    const t = setInterval(paint, 2000);
+    const t = setInterval(() => {
+      if (Object.keys(cursorsRef.current).length > 0) paint();
+    }, 3000);
     return () => clearInterval(t);
   }, [paint]);
 
@@ -383,7 +439,7 @@ export default function Whiteboard({
 
     // Broadcast cursor position (throttled) so others can see where we are.
     const now = Date.now();
-    if (now - lastCursorSent.current > 60) {
+    if (now - lastCursorSent.current > 120) {
       lastCursorSent.current = now;
       realtime.broadcast({ type: 'cursor', x, y, sender: '' });
     }
@@ -395,7 +451,8 @@ export default function Whiteboard({
       v.x += e.clientX - startRef.current[0];
       v.y += e.clientY - startRef.current[1];
       startRef.current = [e.clientX, e.clientY];
-      rerender();
+      // Panning re-bakes the layer, so coalesce it to one per frame.
+      scheduleRerender();
       return;
     }
 
@@ -405,7 +462,7 @@ export default function Whiteboard({
     } else if (liveRef.current.kind === 'shape') {
       liveRef.current.to = [x, y];
     }
-    paint();
+    schedulePaint();
   }
 
   function onPointerUp() {
