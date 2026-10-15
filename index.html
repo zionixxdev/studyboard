@@ -18,6 +18,8 @@
   </a>
   <span class="spacer"></span>
   <span class="pill" id="connPill" title="Backend connection"><span class="dot" id="connDot"></span><span id="connText">checking…</span></span>
+  <a class="btn sm" id="signInLink" href="login.html">Sign in</a>
+  <a class="btn sm primary" id="signUpLink" href="signup.html">Create account</a>
   <button class="btn sm" id="signOutBtn" hidden>Sign out</button>
   <button class="btn sm" id="installBtn" hidden>Install</button>
   <button class="btn sm icon" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">◐</button>
@@ -31,7 +33,16 @@
 
   <div id="netBanner" class="banner hidden">You are offline. Live collaboration needs a connection.</div>
 
-  <div class="grid-2">
+  <section class="card hidden" id="signedOutCard">
+    <h2>Sign in to StudyBoard</h2>
+    <p class="muted">Create a free account to make study rooms, invite friends with a link, and study together on a shared whiteboard with chat, a focus timer and voice.</p>
+    <div class="row wrap">
+      <a class="btn primary" href="signup.html">Create account</a>
+      <a class="btn" href="login.html">Sign in</a>
+    </div>
+  </section>
+
+  <div class="grid-2" id="createJoin">
     <section class="card">
       <h2>Create a room</h2>
       <p class="small muted">You become the owner: you can clear the board, manage members and revoke the invite link.</p>
@@ -55,7 +66,7 @@
     </section>
   </div>
 
-  <section style="margin-top:1.4rem">
+  <section style="margin-top:1.4rem" id="roomsSection">
     <div class="row"><h2 class="grow" style="margin:0">Your rooms</h2>
       <button class="btn sm ghost" id="refreshRooms">Refresh</button></div>
     <p class="small muted" id="roomsNote"></p>

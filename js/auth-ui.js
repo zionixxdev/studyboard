@@ -13,10 +13,23 @@ let gateEl = null;
 export function showAuthGate(handlers = {}) {
   if (gateEl) gateEl.remove();          // only ever one gate
 
-  const root = document.createElement("div");
-  root.className = "modal-scrim";
-  root.id = "authGate";
-  document.body.appendChild(root);
+  // Two ways to present the same panel:
+  //   handlers.mount = <element>  -> render inline, for the /login and /signup
+  //                                  pages
+  //   no mount                    -> a non-dismissible full-screen overlay, for
+  //                                  the app pages when there is no session
+  const mount = handlers.mount && handlers.mount.nodeType === 1 ? handlers.mount : null;
+  const isOverlay = !mount;
+
+  const root = mount || document.createElement("div");
+  if (mount) {
+    root.classList.add("auth-page");
+    root.innerHTML = "";
+  } else {
+    root.className = "modal-scrim";
+    root.id = "authGate";
+    document.body.appendChild(root);
+  }
   gateEl = root;
 
   const state = {
@@ -161,26 +174,31 @@ export function showAuthGate(handlers = {}) {
   render();
 
   return {
-    close() { root.remove(); if (gateEl === root) gateEl = null; },
+    close() { if (isOverlay) root.remove(); if (gateEl === root) gateEl = null; },
     setError(m) { state.error = m; state.busy = false; render(); },
     setNotice(m) { state.notice = m; state.busy = false; render(); },
   };
 }
 
 // Shared by both pages: turns a page's auth requirements into gate handlers.
-export function authGateHandlers(auth, { recovery = false, error = null } = {}) {
+export function authGateHandlers(auth, { recovery = false, error = null, next = null } = {}) {
+  const here = location.origin + location.pathname;
+  // Carry ?next= through the Google round trip too, so a deep link survives.
+  const googleReturn = next ? here + "?next=" + encodeURIComponent(next) : here;
+  const go = () => { if (next) location.replace(next); else location.reload(); };
+
   return {
     recovery,
     error,
-    signIn: async (email, password) => { await auth.signInWithPassword(email, password); location.reload(); },
+    signIn: async (email, password) => { await auth.signInWithPassword(email, password); go(); },
     signUp: async (email, password, name) => {
       const r = await auth.signUpWithPassword(email, password, name);
       if (r.needsConfirmation) {
         return { notice: "Account created. Check your email for the confirmation link, then sign in." };
       }
-      location.reload();
+      go();
     },
-    google: () => auth.signInWithGoogle(),
+    google: () => auth.signInWithGoogle(googleReturn),
     reset: async (email) => {
       await auth.sendPasswordReset(email);
       return { notice: "If that email has an account, a reset link is on its way." };
@@ -188,7 +206,7 @@ export function authGateHandlers(auth, { recovery = false, error = null } = {}) 
     setPassword: async (password) => {
       await auth.updatePassword(password);
       auth.cleanUrl();
-      location.reload();
+      go();
     },
   };
 }

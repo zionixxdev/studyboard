@@ -113,11 +113,11 @@ export async function updatePassword(newPassword) {
 // -----------------------------------------------------------------------------
 // Google
 // -----------------------------------------------------------------------------
-export async function signInWithGoogle() {
+export async function signInWithGoogle(redirectTo) {
   const { error } = await sb.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: location.origin + location.pathname,
+      redirectTo: redirectTo || (location.origin + location.pathname),
       queryParams: { prompt: "select_account" },
     },
   });

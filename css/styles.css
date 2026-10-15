@@ -232,6 +232,7 @@ label { display: block; font-size: .86rem; color: var(--muted); margin: .7rem 0 
 @keyframes sk { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 /* ---------- auth gate ---------- */
+.auth-page-host { max-width: 420px; margin: 2.5rem auto; }
 .auth-modal { max-width: 420px; }
 .auth-brand { display: flex; align-items: center; gap: .5rem; font-weight: 800; margin-bottom: .7rem; }
 .auth-brand .logo { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: #04211f; font-weight: 900; }

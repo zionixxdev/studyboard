@@ -5,9 +5,9 @@
      collaboration is online-only by design.
    * Same-origin assets and CDN libraries use stale-while-revalidate.
    ============================================================================= */
-const VERSION = "studyboard-v6";
+const VERSION = "studyboard-v7";
 const SHELL = [
-  "./", "index.html", "room.html", "offline.html",
+  "./", "index.html", "room.html", "login.html", "signup.html", "offline.html",
   "manifest.webmanifest", "css/styles.css",
   "js/config.js", "js/supabase-client.js", "js/util.js", "js/ui.js", "js/auth.js",
   "js/auth-ui.js",

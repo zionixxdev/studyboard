@@ -26,6 +26,17 @@ if (params.get("invite")) {
 
 function busy(btn, on) { if (btn) btn.disabled = on; }
 
+// The signed-out home page: the site is visible, and sign-in / sign-up are
+// ordinary links in the header and in the hero card.
+function showSignedOut() {
+  $("#signedOutCard")?.classList.remove("hidden");
+  $("#createJoin")?.classList.add("hidden");
+  $("#roomsSection")?.classList.add("hidden");
+  $("#signInLink")?.classList.remove("hidden");
+  $("#signUpLink")?.classList.remove("hidden");
+  $("#signOutBtn")?.classList.add("hidden");
+}
+
 async function boot() {
   const urlState = auth.initialUrlState();
   let user = null;
@@ -45,12 +56,18 @@ async function boot() {
     return;
   }
 
-  // No session: ask who you are. Nothing is ever created behind your back.
+  // No session: show the site with real sign-in / sign-up entry points, rather
+  // than hiding everything behind a modal. Nothing is ever created behind your
+  // back — you choose to sign in.
   if (!user) {
-    showAuthGate(authGateHandlers(auth, { error: urlState?.error || null }));
+    showSignedOut();
+    if (urlState?.error) toast(urlState.error, "error");
     return;
   }
   auth.cleanUrl();
+  $("#signedOutCard")?.classList.add("hidden");
+  $("#signInLink")?.classList.add("hidden");
+  $("#signUpLink")?.classList.add("hidden");
 
   const saved = localStorage.getItem(NICK_KEY) || auth.displayName(user);
   $("#createNick").value = saved;

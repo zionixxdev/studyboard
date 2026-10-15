@@ -67,10 +67,10 @@ async function main() {
     return;
   }
 
-  // Without an identity a room cannot tell whether you are its owner. Ask who
-  // you are rather than guessing.
+  // Without an identity a room cannot tell whether you are its owner. Send the
+  // user to sign in, and bring them straight back here afterwards.
   if (!user) {
-    showAuthGate(authGateHandlers(auth, { error: urlState?.error || null }));
+    location.replace("login.html?next=" + encodeURIComponent(location.href));
     return;
   }
   auth.cleanUrl();
