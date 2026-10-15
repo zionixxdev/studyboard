@@ -1,22 +1,29 @@
-# Secrets — never commit real environment files
-.env
-.env.*
-!.env.example
+# Dependencies
+node_modules/
 
-# Generated from .env (uncomment to keep your keys out of git)
-# js/config.js
+# Build output
+dist/
+dist-ssr/
+*.local
+
+# Environment — never commit real secrets
+.env
+.env.local
+.env.*.local
 
 # Editor / OS
-.DS_Store
-Thumbs.db
-*.swp
+.vscode/*
+!.vscode/extensions.json
 .idea/
-.vscode/
+.DS_Store
+*.swp
 
-# Node (only used by the optional CLI / generator)
-node_modules/
+# Logs
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Supabase CLI local state
+# Supabase local
 supabase/.temp/
 supabase/.branches/
