@@ -1,0 +1,251 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   StudyBoard — Liquid Glass design system
+   Tokens are stored as space-separated RGB channels so Tailwind can apply
+   opacity modifiers (e.g. `bg-glass-bg/40`).
+   ========================================================================== */
+
+:root {
+  /* Light mode (default tokens overridden by .dark below) */
+  --glass-bg: 255 255 255;
+  --glass-border: 255 255 255;
+  --glass-highlight: 255 255 255;
+  --ink: 24 26 40;
+  --ink-soft: 68 72 96;
+  --ink-faint: 120 124 148;
+  --accent: 88 101 242;
+  --accent-soft: 140 150 255;
+  --danger: 220 68 88;
+  --success: 34 170 120;
+
+  --app-bg-1: #eef1ff;
+  --app-bg-2: #f7f2ff;
+  --app-bg-3: #eafcff;
+
+  --glass-blur: 18px;
+  --glass-saturate: 140%;
+}
+
+.dark {
+  --glass-bg: 20 24 46;
+  --glass-border: 255 255 255;
+  --glass-highlight: 255 255 255;
+  --ink: 233 236 252;
+  --ink-soft: 178 184 214;
+  --ink-faint: 130 137 172;
+  --accent: 120 134 255;
+  --accent-soft: 160 170 255;
+  --danger: 255 106 128;
+  --success: 72 214 156;
+
+  --app-bg-1: #070b1a;
+  --app-bg-2: #0d1030;
+  --app-bg-3: #0a1830;
+
+  --glass-blur: 20px;
+  --glass-saturate: 130%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: rgb(var(--ink));
+  background: var(--app-bg-1);
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+/* Animated ambient background: soft blurred light blobs behind frosted glass.
+   Purely decorative — aria-hidden in the DOM. */
+.app-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 800px at 15% 10%, var(--app-bg-2), transparent 60%),
+    radial-gradient(1000px 700px at 85% 20%, var(--app-bg-3), transparent 55%),
+    var(--app-bg-1);
+}
+
+.app-ambient::before,
+.app-ambient::after {
+  content: '';
+  position: absolute;
+  width: 46vmax;
+  height: 46vmax;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.55;
+  will-change: transform;
+}
+
+.app-ambient::before {
+  top: -12vmax;
+  left: -8vmax;
+  background: radial-gradient(circle at 30% 30%, rgb(var(--accent) / 0.55), transparent 70%);
+  animation: drift 22s ease-in-out infinite;
+}
+
+.app-ambient::after {
+  bottom: -14vmax;
+  right: -10vmax;
+  background: radial-gradient(circle at 60% 60%, rgb(var(--accent-soft) / 0.45), transparent 70%);
+  animation: float 26s ease-in-out infinite;
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(40px, -30px, 0) scale(1.08);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -18px, 0);
+  }
+}
+
+/* ==========================================================================
+   Glass primitives
+   ========================================================================== */
+
+@layer components {
+  .glass {
+    background: linear-gradient(
+      145deg,
+      rgb(var(--glass-bg) / 0.55),
+      rgb(var(--glass-bg) / 0.28)
+    );
+    border: 1px solid rgb(var(--glass-border) / 0.14);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgb(var(--glass-highlight) / 0.12);
+  }
+
+  .glass-strong {
+    background: linear-gradient(
+      145deg,
+      rgb(var(--glass-bg) / 0.78),
+      rgb(var(--glass-bg) / 0.5)
+    );
+    border: 1px solid rgb(var(--glass-border) / 0.18);
+    backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(var(--glass-saturate));
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgb(var(--glass-highlight) / 0.16);
+  }
+
+  .glass-subtle {
+    background: rgb(var(--glass-bg) / 0.32);
+    border: 1px solid rgb(var(--glass-border) / 0.1);
+    backdrop-filter: blur(calc(var(--glass-blur) - 6px)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 6px)) saturate(var(--glass-saturate));
+  }
+
+  /* A soft specular highlight sweep across the top edge of a glass surface. */
+  .glass-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+  .glass-sheen::after {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 45%;
+    background: linear-gradient(
+      to bottom,
+      rgb(var(--glass-highlight) / 0.14),
+      transparent
+    );
+    pointer-events: none;
+  }
+
+  .pill {
+    border-radius: 9999px;
+  }
+
+  .focus-ring {
+    outline: none;
+  }
+  .focus-ring:focus-visible {
+    box-shadow: 0 0 0 2px rgb(var(--app-bg-1)), 0 0 0 4px rgb(var(--accent) / 0.7);
+  }
+}
+
+/* Thin, glassy scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--ink-faint) / 0.5) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--ink-faint) / 0.4);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Accessible contrast helpers */
+.text-soft {
+  color: rgb(var(--ink-soft));
+}
+.text-faint {
+  color: rgb(var(--ink-faint));
+}
+
+/* ==========================================================================
+   Motion preferences — honour reduced-motion everywhere.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .app-ambient::before,
+  .app-ambient::after {
+    animation: none !important;
+  }
+}
+
+/* Skeleton shimmer for loading states */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgb(var(--glass-bg) / 0.3) 25%,
+    rgb(var(--glass-bg) / 0.55) 37%,
+    rgb(var(--glass-bg) / 0.3) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
