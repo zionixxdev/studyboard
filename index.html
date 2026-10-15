@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>StudyBoard — study together in real time</title>
+<meta name="description" content="Create a shared study room, invite friends with a link, and study together on a live whiteboard — no account needed." />
+<meta name="theme-color" content="#0ea5a4" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html" aria-label="StudyBoard home">
+    <span class="logo" aria-hidden="true">S</span> StudyBoard
+  </a>
+  <span class="spacer"></span>
+  <span class="pill" id="connPill" title="Backend connection"><span class="dot" id="connDot"></span><span id="connText">checking…</span></span>
+  <button class="btn sm" id="installBtn" hidden>Install</button>
+  <button class="btn sm icon" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">◐</button>
+</header>
+
+<main class="wrap-narrow">
+  <section class="hero">
+    <h1>Study together, in real time.</h1>
+    <p class="muted">Spin up a room, share a link, and work through problems on a shared whiteboard with chat, a focus timer and voice. No email, no password — just a nickname.</p>
+  </section>
+
+  <div id="netBanner" class="banner hidden">You are offline. Live collaboration needs a connection.</div>
+
+  <div class="grid-2">
+    <section class="card">
+      <h2>Create a room</h2>
+      <p class="small muted">You become the owner: you can clear the board, manage members and revoke the invite link.</p>
+      <label for="createName">Room name</label>
+      <input id="createName" class="input" maxlength="80" placeholder="Physics — Rotational motion" />
+      <label for="createNick">Your nickname</label>
+      <input id="createNick" class="input" maxlength="32" placeholder="e.g. Aditya" />
+      <p><button class="btn primary" id="createBtn">Create room</button></p>
+      <p class="small muted" id="createMsg"></p>
+    </section>
+
+    <section class="card">
+      <h2>Join a room</h2>
+      <p class="small muted">Paste an invitation code or open the invite link a friend shared.</p>
+      <label for="joinCode">Invitation code</label>
+      <input id="joinCode" class="input" maxlength="64" placeholder="e.g. K7QM2XZ9PT" autocapitalize="characters" autocomplete="off" />
+      <label for="joinNick">Your nickname</label>
+      <input id="joinNick" class="input" maxlength="32" placeholder="e.g. Meera" />
+      <p><button class="btn primary" id="joinBtn">Join room</button></p>
+      <p class="small muted" id="joinMsg"></p>
+    </section>
+  </div>
+
+  <section style="margin-top:1.4rem">
+    <div class="row"><h2 class="grow" style="margin:0">Your rooms</h2>
+      <button class="btn sm ghost" id="refreshRooms">Refresh</button></div>
+    <p class="small muted" id="roomsNote"></p>
+    <div class="room-list" id="roomList"><div class="skeleton" style="height:56px"></div></div>
+  </section>
+
+  <footer class="small muted" style="margin:2rem 0 1rem">
+    <p>Anonymous sessions are tied to this browser. If you clear site data, you lose access to rooms you own. <a href="#" id="repoLink" rel="noopener" hidden>Source &amp; docs</a></p>
+  </footer>
+</main>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
