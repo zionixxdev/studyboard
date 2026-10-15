@@ -23,8 +23,9 @@ if (params.get("invite")) {
 function busy(btn, on) { if (btn) btn.disabled = on; }
 
 async function boot() {
+  let user = null;
   try {
-    await ensureSession();
+    user = await ensureSession();
     setConn("online", "connected");
   } catch (e) {
     setConn("offline", "offline");
@@ -41,6 +42,14 @@ async function boot() {
   if (repoLink && REPO_URL && !REPO_URL.includes("your-username")) {
     repoLink.href = REPO_URL;
     repoLink.hidden = false;
+  }
+
+  // Surface this browser's anonymous identity. It must stay the same between
+  // page loads — if it changes, access to your own rooms silently disappears,
+  // so it is worth being able to see.
+  const sessionLine = $("#sessionLine");
+  if (sessionLine && user?.id) {
+    sessionLine.innerHTML = `This browser's identity: <code>${escapeHtml(String(user.id).slice(0, 8))}</code> — it must stay the same to keep access to your rooms.`;
   }
 
   $("#createBtn").onclick = onCreate;

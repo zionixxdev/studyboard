@@ -61,6 +61,7 @@ async function main() {
 
   let roomId = params.get("room");
   const inviteCode = params.get("invite");
+  const justCreated = params.get("new") === "1";
 
   if (!roomId && inviteCode) {
     roomId = await joinViaInvite(inviteCode);
@@ -68,13 +69,20 @@ async function main() {
   }
   if (!roomId) { toast("No room specified.", "error"); location.href = "index.html"; return; }
 
-  myMember = await getMyMembership(roomId);
+  const resolved = await resolveMembership(roomId);
+  myMember = resolved.member;
+
   if (!myMember) {
+    // Never ask the person who just created a room for an invite code to it.
+    // If their membership cannot be confirmed that is a fault to report, not a
+    // prompt to show them.
+    if (justCreated) { showMembershipProblem(roomId, resolved.error); return; }
+
     const ok = await joinExisting(roomId, inviteCode);
     if (!ok) { location.href = "index.html"; return; }
-    myMember = await getMyMembership(roomId);
+    myMember = (await resolveMembership(roomId)).member;
   }
-  if (!myMember) { location.href = "index.html"; return; }
+  if (!myMember) { showMembershipProblem(roomId, resolved.error); return; }
 
   myColor = colorFor(me);
   await startRoom(roomId);
@@ -118,15 +126,65 @@ async function askNickname() {
   return nick;
 }
 
-async function getMyMembership(roomId) {
-  const { data, error } = await sb
-    .from("room_members")
-    .select("user_id, nickname, role, room_id")
-    .eq("room_id", roomId)
-    .eq("user_id", me)
-    .maybeSingle();
-  if (error) return null;
-  return data || null;
+// Returns { member, error }. The distinction matters: an error (network, or the
+// auth token not attached yet) must never be mistaken for "not a member", which
+// is exactly what used to make the app demand an invite code from a room's own
+// creator.
+async function fetchMembership(roomId) {
+  try {
+    const { data, error } = await sb
+      .from("room_members")
+      .select("user_id, nickname, role, room_id")
+      .eq("room_id", roomId)
+      .eq("user_id", me)
+      .maybeSingle();
+    if (error) return { member: null, error };
+    return { member: data || null, error: null };
+  } catch (e) {
+    return { member: null, error: e };
+  }
+}
+
+async function resolveMembership(roomId, tries = 3) {
+  let last = { member: null, error: null };
+  for (let i = 0; i < tries; i++) {
+    last = await fetchMembership(roomId);
+    if (last.member) return last;
+    if (!last.error) return last;              // a clean "no row" — retrying won't help
+    await new Promise((r) => setTimeout(r, 250 * (i + 1)));   // transient: back off and retry
+  }
+  return last;
+}
+
+// Shown instead of an invite-code prompt. Says what actually went wrong and
+// what to check, rather than asking the user for something they cannot know.
+function showMembershipProblem(roomId, error) {
+  const uid = me ? String(me).slice(0, 8) : "none";
+  openModal({
+    title: "Couldn't open this room",
+    html: `
+      <p>This browser isn't recognised as a member of this room — and since you
+      created it, you should not need an invite code. So you aren't being asked
+      for one.</p>
+      <p class="small muted">The usual cause is the browser losing its anonymous
+      session between pages, so it is now a different identity from the one that
+      created the room.</p>
+      <ul class="small muted">
+        <li>Room: <code>${escapeHtml(String(roomId).slice(0, 8))}…</code></li>
+        <li>Signed in as: <code>${escapeHtml(uid)}…</code></li>
+        ${error ? `<li>Lookup error: <code>${escapeHtml(error.message || String(error))}</code></li>` : ""}
+      </ul>
+      <p class="small muted">Open the home page and look at <strong>Your rooms</strong>.
+      If the room isn't listed there either, this browser's identity is being reset
+      between page loads — that is the thing to fix.</p>
+      <div class="row" style="justify-content:flex-end;margin-top:1rem">
+        <a class="btn" href="index.html">Home</a>
+        <button class="btn primary" id="mpReload">Reload</button>
+      </div>`,
+    wire(root) {
+      root.querySelector("#mpReload").onclick = () => location.reload();
+    },
+  });
 }
 
 // ------------------------------------------------------------------- startup
