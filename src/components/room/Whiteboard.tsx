@@ -44,13 +44,21 @@ const TOOLS: { id: Tool; label: string; icon: string }[] = [
 
 const COLORS = ['#e9ecfc', '#7a86ff', '#48d69c', '#ff6a80', '#ffd166', '#5ec8ff'];
 
+/** Private bucket that holds room PDFs and whiteboard images. */
+const BUCKET = 'room-files';
+const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+
 /** Apply the pan/zoom transform (in device pixels) to a 2D context. */
 function applyTransform(ctx: CanvasRenderingContext2D, view: View, dpr: number) {
   ctx.setTransform(view.scale * dpr, 0, 0, view.scale * dpr, view.x * dpr, view.y * dpr);
 }
 
 /** Draw a single operation in world coordinates. */
-function drawOp(ctx: CanvasRenderingContext2D, op: WhiteboardOp) {
+function drawOp(
+  ctx: CanvasRenderingContext2D,
+  op: WhiteboardOp,
+  images?: Map<string, HTMLImageElement>,
+) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
@@ -113,6 +121,13 @@ function drawOp(ctx: CanvasRenderingContext2D, op: WhiteboardOp) {
       ctx.fillText(op.latex, op.x, op.y);
       break;
     }
+    case 'image': {
+      const img = images?.get(op.path);
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, op.x, op.y, op.width, op.height);
+      }
+      break;
+    }
     case 'clear':
       // Handled during full re-render.
       break;
@@ -160,9 +175,18 @@ export default function Whiteboard({
   const [grid, setGrid] = useState(true);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
   // Remote cursors are drawn imperatively onto the canvas, so they live in a ref
   // rather than React state — an incoming cursor must not trigger a re-render.
   const cursorsRef = useRef<Record<string, RemoteCursor>>({});
+
+  // Whiteboard images live in Supabase Storage; an op only stores the object
+  // path. Loaded bitmaps and resolved signed URLs are cached, so a repaint
+  // never re-downloads anything.
+  const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
+  const signedUrls = useRef<Map<string, string>>(new Map());
+  const loadingImages = useRef<Set<string>>(new Set());
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const lastCursorSent = useRef(0);
 
@@ -196,7 +220,7 @@ export default function Whiteboard({
         octx.clearRect(0, 0, off.width, off.height);
         applyTransform(octx, viewRef.current, dpr);
       } else {
-        drawOp(octx, op);
+        drawOp(octx, op, imageCache.current);
       }
     }
     renderGrid();
@@ -220,7 +244,8 @@ export default function Whiteboard({
     ctx.drawImage(off, 0, 0);
 
     applyTransform(ctx, viewRef.current, dpr);
-    if (liveRef.current && liveRef.current.kind !== 'clear') drawOp(ctx, liveRef.current);
+    if (liveRef.current && liveRef.current.kind !== 'clear')
+      drawOp(ctx, liveRef.current, imageCache.current);
 
     // Remote cursors, drawn in world space so they track pan/zoom.
     const now = Date.now();
@@ -258,6 +283,37 @@ export default function Whiteboard({
     });
   }, [rerender]);
 
+  /** Load an image op's bitmap (resolving a signed URL if needed), then repaint. */
+  const ensureImage = useCallback(
+    async (path: string) => {
+      if (imageCache.current.has(path) || loadingImages.current.has(path)) return;
+      loadingImages.current.add(path);
+      try {
+        let url = signedUrls.current.get(path);
+        if (!url) {
+          const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
+          if (error || !data?.signedUrl) return;
+          url = data.signedUrl;
+          signedUrls.current.set(path, url);
+        }
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('image load failed'));
+          img.src = url as string;
+        });
+        imageCache.current.set(path, img);
+        rerender();
+      } catch {
+        // Leave the op unrendered; a later repaint trigger will retry.
+      } finally {
+        loadingImages.current.delete(path);
+      }
+    },
+    [rerender],
+  );
+
   /** Commit an op locally and broadcast it. */
   const commit = useCallback(
     (op: WhiteboardOp) => {
@@ -270,7 +326,7 @@ export default function Whiteboard({
           rerender();
         } else {
           applyTransform(octx, viewRef.current, dpr);
-          drawOp(octx, op);
+          drawOp(octx, op, imageCache.current);
           paint();
         }
       }
@@ -291,16 +347,17 @@ export default function Whiteboard({
         return;
       }
       opsRef.current.push(op);
+      if (op.kind === 'image') void ensureImage(op.path);
       const off = offscreenRef.current;
       const octx = off?.getContext('2d');
       if (off && octx) {
         applyTransform(octx, viewRef.current, dpr);
-        drawOp(octx, op);
+        drawOp(octx, op, imageCache.current);
         paint();
       }
       bump();
     },
-    [rerender, paint, dpr],
+    [rerender, paint, dpr, ensureImage],
   );
 
   /* --------------------------- setup / sizing --------------------------- */
@@ -341,13 +398,16 @@ export default function Whiteboard({
       const saved = (data?.data as { ops?: WhiteboardOp[] } | undefined)?.ops;
       if (Array.isArray(saved) && saved.length) {
         opsRef.current = saved;
+        saved.forEach((op) => {
+          if (op.kind === 'image') void ensureImage(op.path);
+        });
         rerender();
       }
     })();
     return () => {
       active = false;
     };
-  }, [roomId, rerender]);
+  }, [roomId, rerender, ensureImage]);
 
   useEffect(() => {
     resize();
@@ -371,7 +431,11 @@ export default function Whiteboard({
     return realtime.subscribe((e: RealtimeEvent) => {
       if (e.type === 'whiteboard:op') applyRemote(e.op);
       else if (e.type === 'whiteboard:snapshot') {
-        opsRef.current = (e.data as { ops?: WhiteboardOp[] })?.ops ?? [];
+        const ops = (e.data as { ops?: WhiteboardOp[] })?.ops ?? [];
+        opsRef.current = ops;
+        ops.forEach((op) => {
+          if (op.kind === 'image') void ensureImage(op.path);
+        });
         rerender();
         bump();
       } else if (e.type === 'cursor') {
@@ -382,7 +446,7 @@ export default function Whiteboard({
         schedulePaint();
       }
     });
-  }, [realtime, applyRemote, rerender, schedulePaint]);
+  }, [realtime, applyRemote, rerender, schedulePaint, ensureImage]);
 
   // Repaint periodically only while remote cursors are on screen (so they fade
   // out) — an idle board costs nothing.
@@ -515,9 +579,10 @@ export default function Whiteboard({
       const octx = offscreenRef.current?.getContext('2d');
       if (octx) {
         applyTransform(octx, viewRef.current, dpr);
-        drawOp(octx, op);
+        drawOp(octx, op, imageCache.current);
         paint();
       }
+      if (op.kind === 'image') void ensureImage(op.path);
     }
     bump();
     realtime.broadcast({ type: 'whiteboard:snapshot', data: { ops: opsRef.current }, sender: '' });
@@ -558,6 +623,106 @@ export default function Whiteboard({
     setStatusMsg(error ? error.message : 'Whiteboard saved.');
     if (!error) realtime.broadcast({ type: 'whiteboard:snapshot', data: payload, sender: '' });
     setTimeout(() => setStatusMsg(null), 2500);
+  }
+
+  /* ---------------------------- image import --------------------------- */
+
+  /** Shrink very large photos before upload so storage and rendering stay cheap. */
+  async function prepareImage(file: File): Promise<{ blob: Blob; mime: string }> {
+    const MAX_DIM = 1600;
+    const fallback = { blob: file, mime: file.type || 'image/png' };
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height));
+      if (scale >= 1 && file.size <= 1_200_000) return fallback;
+
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return fallback;
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.85));
+      return blob ? { blob, mime: 'image/jpeg' } : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  /** Upload an image and drop it onto the board, centred in the current view. */
+  async function insertImage(file: File) {
+    if (!canEdit) return;
+    setStatusMsg(null);
+
+    if (!file.type.startsWith('image/')) {
+      setStatusMsg('That file is not an image.');
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setStatusMsg('Image is larger than 12 MB.');
+      return;
+    }
+
+    setImageBusy(true);
+    try {
+      const { blob, mime } = await prepareImage(file);
+      const ext = mime === 'image/jpeg' ? 'jpg' : file.name.split('.').pop() || 'png';
+      const path = `${roomId}/${crypto.randomUUID()}-img.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, blob, { contentType: mime, upsert: false });
+      if (upErr) throw upErr;
+
+      const { data: auth } = await supabase.auth.getUser();
+      await supabase.from('files').insert({
+        room_id: roomId,
+        uploader_id: auth.user?.id,
+        storage_path: path,
+        name: file.name,
+        mime,
+        size_bytes: blob.size,
+      });
+
+      // Render from the local blob straight away; peers fetch a signed URL.
+      const localUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('decode failed'));
+        img.src = localUrl;
+      });
+      imageCache.current.set(path, img);
+      signedUrls.current.set(path, localUrl);
+
+      // Place it centred, fitted to ~70% of the visible area.
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const v = viewRef.current;
+      const worldW = (rect?.width ?? 800) / v.scale;
+      const worldH = (rect?.height ?? 600) / v.scale;
+      const worldLeft = -v.x / v.scale;
+      const worldTop = -v.y / v.scale;
+      const fit = Math.min(
+        (worldW * 0.7) / img.naturalWidth,
+        (worldH * 0.7) / img.naturalHeight,
+        1,
+      );
+      const width = img.naturalWidth * fit;
+      const height = img.naturalHeight * fit;
+      const x = worldLeft + (worldW - width) / 2;
+      const y = worldTop + (worldH - height) / 2;
+
+      commit({ kind: 'image', x, y, width, height, path });
+      setStatusMsg('Image added — draw over it with the pen.');
+    } catch (e) {
+      setStatusMsg(`Could not add image: ${(e as Error).message}`);
+    } finally {
+      setImageBusy(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
+      setTimeout(() => setStatusMsg(null), 3000);
+    }
   }
 
   /* ------------------------------- view -------------------------------- */
@@ -634,6 +799,16 @@ export default function Whiteboard({
             Reset view
           </GlassButton>
           {canEdit && (
+            <GlassButton
+              size="sm"
+              variant="subtle"
+              loading={imageBusy}
+              onClick={() => imageInputRef.current?.click()}
+            >
+              Add image
+            </GlassButton>
+          )}
+          {canEdit && (
             <GlassButton size="sm" variant="danger" onClick={clearBoard}>
               Clear
             </GlassButton>
@@ -643,6 +818,17 @@ export default function Whiteboard({
           </GlassButton>
         </div>
       </div>
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void insertImage(f);
+        }}
+      />
 
       {statusMsg && <p className="text-xs text-soft">{statusMsg}</p>}
 

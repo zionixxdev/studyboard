@@ -134,7 +134,9 @@ export default function Room() {
             {tab === 'board' && (
               <Whiteboard roomId={room.id} realtime={realtime} canEdit={Boolean(myRole)} />
             )}
-            {tab === 'pdf' && <PdfPanel roomId={room.id} realtime={realtime} />}
+            {tab === 'pdf' && (
+              <PdfPanel roomId={room.id} realtime={realtime} meId={me.id} canManage={canManage} />
+            )}
             {tab === 'math' && <MathPanel realtime={realtime} />}
             {tab === 'timer' && (
               <TimerPanel roomId={room.id} realtime={realtime} canControl={canManage} />

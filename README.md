@@ -23,9 +23,11 @@ Built with **React + TypeScript + Vite**, **Tailwind CSS**, and **Supabase**
   checks.
 - **Whiteboard** — pen, highlighter, eraser, shapes, text; colour and size;
   undo/redo; clear; grid; zoom/pan; real-time sync of incremental ops; remote
-  cursors; save/restore snapshots; touch support.
-- **PDF viewer** — upload (validated), view, page navigation, zoom, private
-  storage with signed URLs, page sync across participants.
+  cursors; save/restore snapshots; touch support; **image import you can draw
+  over** (images are downscaled, stored privately, and shared with the room).
+- **PDF viewer & files** — upload (validated), view, page navigation, zoom,
+  private storage with signed URLs, page sync across participants, and
+  **delete** (uploader or manager).
 - **Math tools** — MathLive equation editor (inserts onto the board) and a
   JSXGraph coordinate plane.
 - **Chat & presence** — real-time messages with pagination, online list,

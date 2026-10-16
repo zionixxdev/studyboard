@@ -17,9 +17,13 @@ const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 export default function PdfPanel({
   roomId,
   realtime,
+  meId,
+  canManage,
 }: {
   roomId: string;
   realtime: ReturnType<typeof useRoomRealtime>;
+  meId: string;
+  canManage: boolean;
 }) {
   const [files, setFiles] = useState<StudyFile[]>([]);
   const [active, setActive] = useState<StudyFile | null>(null);
@@ -31,6 +35,7 @@ export default function PdfPanel({
   const [loadingDoc, setLoadingDoc] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -49,6 +54,29 @@ export default function PdfPanel({
   useEffect(() => {
     void loadFiles();
   }, [loadFiles]);
+
+  /** Delete an upload — the storage object and its row. Only the uploader or a
+   *  room owner/moderator may do this; the database enforces it too. */
+  async function remove(file: StudyFile) {
+    if (!window.confirm(`Delete "${file.name}" for everyone?`)) return;
+    setDeletingId(file.id);
+    setError(null);
+    try {
+      const { error: stErr } = await supabase.storage.from(BUCKET).remove([file.storage_path]);
+      if (stErr) throw stErr;
+      const { error: dbErr } = await supabase.from('files').delete().eq('id', file.id);
+      if (dbErr) throw dbErr;
+      if (active?.id === file.id) {
+        setActive(null);
+        setDoc(null);
+      }
+      await loadFiles();
+    } catch (e) {
+      setError(`Could not delete: ${(e as Error).message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   // Open a PDF: create a short-lived signed URL for the private object, then
   // hand it to pdf.js.
@@ -163,7 +191,7 @@ export default function PdfPanel({
     <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
       {/* File list + upload */}
       <GlassCard className="p-4">
-        <h3 className="mb-3 font-semibold text-ink">Study materials</h3>
+        <h3 className="mb-3 font-semibold text-ink">Files</h3>
 
         <input
           ref={fileInputRef}
@@ -183,27 +211,51 @@ export default function PdfPanel({
         >
           {uploading ? 'Uploading…' : 'Upload PDF'}
         </GlassButton>
-        <p className="mt-2 text-xs text-faint">PDF only, up to 25 MB, stored privately.</p>
+        <p className="mt-2 text-xs text-faint">
+          PDF only, up to 25 MB. Images added on the whiteboard appear here too.
+        </p>
 
         {error && <p className="mt-3 text-xs text-danger">{error}</p>}
         {status && <p className="mt-3 text-xs text-success">{status}</p>}
 
         <ul className="mt-4 space-y-1.5">
           {files.length === 0 && <li className="text-sm text-faint">No files yet.</li>}
-          {files.map((f) => (
-            <li key={f.id}>
-              <button
-                onClick={() => void open(f)}
-                className={
-                  'focus-ring w-full rounded-xl px-3 py-2 text-left text-sm ' +
-                  (active?.id === f.id ? 'bg-accent/20 text-ink' : 'glass-subtle text-soft hover:text-ink')
-                }
-              >
-                <span className="block truncate">{f.name}</span>
-                <span className="text-xs text-faint">{(f.size_bytes / 1024 / 1024).toFixed(1)} MB</span>
-              </button>
-            </li>
-          ))}
+          {files.map((f) => {
+            const isPdf = f.mime === 'application/pdf';
+            const canDelete = f.uploader_id === meId || canManage;
+            return (
+              <li key={f.id} className="flex items-start gap-1.5">
+                <button
+                  onClick={() => isPdf && void open(f)}
+                  disabled={!isPdf}
+                  title={isPdf ? 'Open' : 'Images are annotated on the whiteboard'}
+                  className={
+                    'focus-ring min-w-0 flex-1 rounded-xl px-3 py-2 text-left text-sm ' +
+                    (active?.id === f.id
+                      ? 'bg-accent/20 text-ink'
+                      : 'glass-subtle text-soft hover:text-ink') +
+                    (isPdf ? '' : ' cursor-default')
+                  }
+                >
+                  <span className="block truncate">{f.name}</span>
+                  <span className="text-xs text-faint">
+                    {isPdf ? 'PDF' : 'Image'} · {(f.size_bytes / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                </button>
+                {canDelete && (
+                  <button
+                    onClick={() => void remove(f)}
+                    disabled={deletingId === f.id}
+                    aria-label={`Delete ${f.name}`}
+                    title="Delete"
+                    className="focus-ring pill shrink-0 px-2 py-2 text-xs text-danger hover:bg-danger/15 disabled:opacity-50"
+                  >
+                    {deletingId === f.id ? '…' : 'Delete'}
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </GlassCard>
 

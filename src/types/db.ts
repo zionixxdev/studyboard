@@ -108,4 +108,7 @@ export type WhiteboardOp =
   | { kind: 'shape'; shape: 'rect' | 'ellipse' | 'line' | 'arrow'; color: string; width: number; from: [number, number]; to: [number, number] }
   | { kind: 'text'; x: number; y: number; text: string; color: string; size: number }
   | { kind: 'formula'; x: number; y: number; latex: string }
+  /** An image placed on the board. `path` is its object path in the private
+   *  `room-files` bucket — the bitmap itself is never sent over the wire. */
+  | { kind: 'image'; x: number; y: number; width: number; height: number; path: string }
   | { kind: 'clear' };

@@ -29,14 +29,18 @@ without one.
 - **Whiteboard formulas** are drawn on the canvas as their **LaTeX source**
   rather than fully typeset. The Math tab previews the typeset form with
   MathLive; rendering typeset math onto the canvas would need MathJax-to-SVG.
-- **Whiteboard text/formulas are not draggable** after placement.
+- **Whiteboard text/formulas are not draggable** after placement, and a placed
+  image cannot be moved or resized once committed (undo removes it).
+- **Deleting a file** removes it for everyone in the room and cannot be undone.
+  Only the uploader, the room owner, or a moderator may delete.
 - **Whiteboard performance**: a full redraw happens on undo/redo and on
   zoom/pan. Very large boards (thousands of strokes) will eventually slow down;
   the committed layer is offscreen-cached to keep normal drawing smooth.
 - **Undo/redo** broadcasts a full snapshot rather than an inverse op, so it is
   slightly heavier than a single stroke on the wire.
-- **PDF annotation** is limited to discussing alongside the document (chat) —
-  drawing directly on the PDF page is not implemented.
+- **PDF annotation** is not drawn onto the PDF page itself. To mark material
+  up, add it to the whiteboard as an image (**Add image** in the whiteboard
+  toolbar) and draw over it — the image sits in the layer beneath your strokes.
 - **PDF search** within the document is not implemented (page nav and zoom are).
 - **Study-session history** and **recently shared files** on the dashboard are
   placeholders pointing at the relevant rooms; a dedicated history table is not
