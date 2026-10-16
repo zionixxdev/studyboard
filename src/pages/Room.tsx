@@ -131,9 +131,16 @@ export default function Room() {
         {/* Content */}
         <div className="min-h-[60vh]">
           <Suspense fallback={<FullPageSpinner label="Loading panel…" />}>
-            {tab === 'board' && (
+            {/* The whiteboard and the voice panel stay mounted and are only
+                hidden when inactive. Unmounting them would wipe the board's
+                strokes and drop an active voice call on every tab switch. */}
+            <div className={tab === 'board' ? undefined : 'hidden'}>
               <Whiteboard roomId={room.id} realtime={realtime} canEdit={Boolean(myRole)} />
-            )}
+            </div>
+            <div className={tab === 'voice' ? undefined : 'hidden'}>
+              <VoicePanel roomId={room.id} me={me} />
+            </div>
+
             {tab === 'pdf' && (
               <PdfPanel roomId={room.id} realtime={realtime} meId={me.id} canManage={canManage} />
             )}
@@ -141,7 +148,6 @@ export default function Room() {
             {tab === 'timer' && (
               <TimerPanel roomId={room.id} realtime={realtime} canControl={canManage} />
             )}
-            {tab === 'voice' && <VoicePanel roomId={room.id} me={me} />}
             {tab === 'chat' && (
               <div className="h-[65vh]">
                 <ChatPanel roomId={room.id} meId={me.id} members={members} />

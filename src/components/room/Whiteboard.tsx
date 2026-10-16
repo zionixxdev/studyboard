@@ -189,6 +189,8 @@ export default function Whiteboard({
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const lastCursorSent = useRef(0);
+  // Set whenever the scene changes, so autosave knows there is something to write.
+  const dirtyRef = useRef(false);
 
   /* ----------------------------- rendering ----------------------------- */
 
@@ -331,6 +333,7 @@ export default function Whiteboard({
         }
       }
       realtime.broadcast({ type: 'whiteboard:op', op, sender: '' });
+      dirtyRef.current = true;
       bump();
     },
     [realtime, rerender, paint, dpr],
@@ -355,6 +358,7 @@ export default function Whiteboard({
         drawOp(octx, op, imageCache.current);
         paint();
       }
+      dirtyRef.current = true;
       bump();
     },
     [rerender, paint, dpr, ensureImage],
@@ -367,6 +371,9 @@ export default function Whiteboard({
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
     const rect = wrap.getBoundingClientRect();
+    // Skip while the tab is hidden (display:none yields a zero-size rect) so we
+    // don't clobber the canvas — the ResizeObserver fires again when it returns.
+    if (rect.width < 1 || rect.height < 1) return;
     const w = Math.max(320, Math.floor(rect.width));
     const h = Math.max(320, Math.floor(rect.height));
     canvas.width = w * dpr;
@@ -566,6 +573,7 @@ export default function Whiteboard({
     // Broadcast a full snapshot so peers converge (undo is not trivially
     // expressible as an incremental op).
     rerender();
+    dirtyRef.current = true;
     bump();
     realtime.broadcast({ type: 'whiteboard:snapshot', data: { ops: opsRef.current }, sender: '' });
   }
@@ -584,6 +592,7 @@ export default function Whiteboard({
       }
       if (op.kind === 'image') void ensureImage(op.path);
     }
+    dirtyRef.current = true;
     bump();
     realtime.broadcast({ type: 'whiteboard:snapshot', data: { ops: opsRef.current }, sender: '' });
   }
@@ -593,6 +602,7 @@ export default function Whiteboard({
     opsRef.current = [];
     redoRef.current = [];
     rerender();
+    dirtyRef.current = true;
     bump();
     realtime.broadcast({ type: 'whiteboard:op', op: { kind: 'clear' }, sender: '' });
   }
@@ -608,9 +618,8 @@ export default function Whiteboard({
     rerender();
   }
 
-  async function save() {
-    setSaving(true);
-    setStatusMsg(null);
+  /** Write the current scene to the room's snapshot row. */
+  const persistSnapshot = useCallback(async (): Promise<boolean> => {
     const payload = { ops: opsRef.current };
     const { data: auth } = await supabase.auth.getUser();
     const { error } = await supabase.from('whiteboard_snapshots').upsert({
@@ -619,11 +628,33 @@ export default function Whiteboard({
       updated_by: auth.user?.id,
       updated_at: new Date().toISOString(),
     });
+    return !error;
+  }, [roomId]);
+
+  /** Explicit Save: persists and tells everyone else in the room. */
+  async function save() {
+    setSaving(true);
+    setStatusMsg(null);
+    const ok = await persistSnapshot();
     setSaving(false);
-    setStatusMsg(error ? error.message : 'Whiteboard saved.');
-    if (!error) realtime.broadcast({ type: 'whiteboard:snapshot', data: payload, sender: '' });
+    setStatusMsg(ok ? 'Whiteboard saved.' : 'Could not save the whiteboard.');
+    if (ok) {
+      realtime.broadcast({ type: 'whiteboard:snapshot', data: { ops: opsRef.current }, sender: '' });
+    }
     setTimeout(() => setStatusMsg(null), 2500);
   }
+
+  // Autosave: persist a few seconds after the last change, so the board survives
+  // a refresh, a navigation or a tab switch even if Save is never pressed.
+  useEffect(() => {
+    if (!canEdit) return;
+    const t = setInterval(() => {
+      if (!dirtyRef.current) return;
+      dirtyRef.current = false;
+      void persistSnapshot();
+    }, 8000);
+    return () => clearInterval(t);
+  }, [canEdit, persistSnapshot]);
 
   /* ---------------------------- image import --------------------------- */
 

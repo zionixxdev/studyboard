@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { RealtimeEvent } from '@/types/db';
@@ -79,5 +79,10 @@ export function useRoomRealtime(roomId: string | undefined, me: { id: string; na
     };
   }, []);
 
-  return { broadcast, subscribe, onlineIds, presence, status };
+  // Memoised: consumers' effects depend on this object, and a fresh identity on
+  // every render would tear down and re-subscribe the channel constantly.
+  return useMemo(
+    () => ({ broadcast, subscribe, onlineIds, presence, status }),
+    [broadcast, subscribe, onlineIds, presence, status],
+  );
 }
